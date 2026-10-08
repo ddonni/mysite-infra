@@ -33,3 +33,27 @@
 - **해결**: 접속한 뒤 `bash`를 실행했다. 매번 자동으로 하려면 Session Manager → Preferences → Linux shell profile에 `exec bash`를 넣으면 된다.
 - **배운 점**: 터미널이 "이상하게" 동작하면 지금 어떤 셸인지부터 확인한다 (`echo $0`).
 - 덤: `curl`은 기본으로 응답 본문만 출력한다. 401처럼 본문이 빈 에러는 아무것도 안 찍혀서 성공처럼 보일 수 있다 → `-f`(에러를 실패로 처리)나 `-i`(헤더 포함)로 상태 코드를 확인한다.
+
+## #4 자동 재부팅 설정을 썼는데 적용되지 않음 (2026-10-08, 1-4)
+
+- **증상**: `/etc/apt/apt.conf.d/52unattended-upgrades-local`에 `Automatic-Reboot`와 `Automatic-Reboot-Time`을 썼다. 그런데 `apt-config dump | grep -i reboot`를 해도 아무것도 나오지 않았다.
+- **원인 추측**: 파일 이름이 apt 규칙에 어긋나서 무시됐거나, 파일이 비어 있거나, 문법이 틀렸을 것이다.
+- **진짜 원인**: 원본 `50unattended-upgrades`에서 예시 줄을 그대로 따라 쓰면서 **주석 표시(`//`)까지 같이 써 버렸다.** apt 입장에서는 내 파일이 전부 주석이었다.
+- **해결**: 주석을 지우니 `apt-config dump`에 값이 나왔다.
+- **배운 점**:
+  - 설정을 "썼다"와 "적용됐다"는 다르다. 최종적으로 합쳐진 값을 보여 주는 명령(`apt-config dump`, 나중에는 `nginx -T`, `sysctl` 등)으로 **적용 여부를 확인**한다. 확인하지 않았다면 자동 재부팅이 꺼진 채로 몇 달을 돌았을 것이다.
+  - 예시를 복사할 때는 주석 기호가 같이 따라오지 않았는지 본다.
+
+## #5 스왑 파일이 스왑으로 인식되지 않음 (2026-10-08, 1-4)
+
+- **증상**: fstab에 `/swapfile` 줄을 넣고 `sudo findmnt --verify`를 돌리니 에러는 0개였다. 하지만 `cannot detect on-disk filesystem type` 경고가 나왔다. `blkid /swapfile`도 아무것도 출력하지 않았다.
+- **원인 추측**: 첫 번째 경고(`non-bind mount source ... is a regular file`)는 스왑을 파일로 만들면 늘 나오는 경고다. 두 번째 경고는 파일 안에 스왑 형식이 없다는 뜻일 수 있다.
+- **확인한 것**:
+  - 스왑 파일을 `/` 대신 홈 디렉터리(`/home/ssm-user/`)에 만들었다. 권한도 600이 아니었다.
+  - `swapon --show`가 비어 있었다. 스왑이 켜져 있지 않았다.
+- **진짜 원인**: `fallocate`로 빈 파일만 만들고 **`mkswap`(스왑 형식 써 넣기)을 빠뜨렸다.**
+- **해결**: `swapoff` → `/swapfile`로 옮기기 → `chown root:root`, `chmod 600` → `mkswap` → `swapon`. 재부팅한 뒤 `free -h`, `swapon --show`로 1GB가 켜져 있는 걸 확인했다.
+- **배운 점**:
+  - 스왑 만들기는 **파일 만들기(`fallocate`) → 권한(`chmod 600`) → 형식 써 넣기(`mkswap`) → 지금 켜기(`swapon`) → 부팅 때 켜게 등록(fstab)** 의 다섯 단계다. `swapon`은 재부팅하면 사라지고, fstab은 등록만 한다.
+  - fstab에 오타가 있으면 부팅이 멈출 수 있다. 그런데 SSM만 쓰는 서버는 부팅이 멈추면 들어갈 방법이 없다. 그래서 **백업 → 수정 → `findmnt --verify` → 재부팅** 순서를 지킨다.
+  - 경고 메시지에 단서가 있었다. `blkid -p`, `file`로 파일 내용을 직접 확인해서 원인을 좁혔다.

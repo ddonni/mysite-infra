@@ -78,9 +78,15 @@
   - 트러블슈팅 #3: SSM 기본 셸이 `sh`라 줄 편집 불가 → `bash`
   - 사용자가 헷갈렸던 개념: 기계 권한에 또 "액세스 키"를 떠올림(→ 역할), SSM은 서버가 **나가는** 연결, EBS는 켠 채로 확장 가능, wheel 파일 이름 읽기(`aarch64` = 리눅스 ARM)
   - 비용: 전환 전까지는 작업할 때만 인스턴스를 켜기로 함 → 세션 끝날 때 중지했는지 물어볼 것
-- [ ] 1-4 리눅스 기본 보안·운영 (작업용 사용자+sudo, ufw, unattended-upgrades, Asia/Seoul, 스왑) ← 다음
-  - SSH를 안 쓰므로 "비밀번호 SSH 거절 확인" 완료 조건은 다시 정해야 함 (sshd 자체를 끌지, 설정만 잠글지)
-- [ ] 1-5 ~ 1-12: ROADMAP.md 참고
+- [x] **1-4 리눅스 기본 세팅** (2026-10-08 완료)
+  - sshd 끔(`ssh.socket`+`ssh.service` disable, socket activation), ufw 80/443, unattended-upgrades 확인 + 자동 재부팅 04:00(`52unattended-upgrades-local`), Asia/Seoul, `/swapfile` 1GB + swappiness 10(`/etc/sysctl.d/99-swappiness.conf`)
+  - SSM Session Manager 기본 설정에 `exec bash` 넣음 (한국어 콘솔: 노드 도구 → 세션 관리자 → 기본 설정)
+  - 트러블슈팅 #4(설정을 주석째 복사), #5(`mkswap` 빠짐, 홈 디렉터리에 만듦)
+  - 사용자가 몰랐던 기초: 스왑이 무엇인지(백업으로 오해했음), `ls -l` 읽기, chmod 숫자, nano 사용법(브라우저에서 Ctrl+X가 안 먹을 때가 있음 → 한/영, F2). **리눅스 기초 개념은 단계를 시키기 전에 먼저 짧게 설명할 것.** 명령 이름만 주면 단계를 빠뜨림
+  - ufw를 `80/tcp`, `443/tcp`로 좁히라고 제안함 → 했는지 미확인
+  - 나중에 확인할 것: 자동 재부팅이 실제로 일어나는지(`journalctl --list-boots`). 전환 전에는 밤에 서버를 꺼서 확인 불가 → 1-9 이후
+- [ ] 1-5 PostgreSQL 직접 운영 ← 다음 (Neon은 PG 18 → 서버 PG 버전과 pg_dump 버전 주의, ufw/보안그룹으로 5432 외부 차단 확인)
+- [ ] 1-6 ~ 1-12: ROADMAP.md 참고
 
 측정 명령(PowerShell):
 ```powershell

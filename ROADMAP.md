@@ -47,11 +47,11 @@
 - 비용 메모: 서버 + 고정 IP + 디스크 대략 월 2만 원 안팎 — 실제 청구액을 `MEASUREMENTS.md`에 기록
 
 ### 1-4. 리눅스 기본 보안·운영 세팅
-- [ ] 작업용 사용자 + sudo, SSH 비밀번호 로그인·root 로그인 끄기
-- [ ] 방화벽(ufw) — 보안그룹과 이중으로 두는 이유를 설명할 수 있게
-- [ ] 자동 보안 업데이트(unattended-upgrades), 시간대 Asia/Seoul
-- [ ] 메모리가 작으면 스왑 파일
-- 완료 확인: 비밀번호로 SSH 시도 → 거절되는 걸 직접 본다
+- [x] 작업용 사용자 + sudo, SSH 비밀번호 로그인·root 로그인 끄기 → SSM의 `ssm-user`가 작업용 사용자 역할, **sshd 자체를 끔**(`ssh.socket`·`ssh.service` disable)
+- [x] 방화벽(ufw) — 보안그룹과 이중으로 두는 이유를 설명할 수 있게
+- [x] 자동 보안 업데이트(unattended-upgrades), 시간대 Asia/Seoul → 자동 재부팅 04:00 KST 추가
+- [x] 메모리가 작으면 스왑 파일 → `/swapfile` 1GB, swappiness 10
+- 완료 확인: ~~비밀번호로 SSH 시도 → 거절되는 걸 직접 본다~~ → SSH를 안 쓰므로 **재부팅 후에도 22번을 듣는 프로세스가 없다**(`ss -tlnp`)로 변경. 2026-10-08 확인
 - 공고: 🅢 리눅스·OS, 취약점 조치 · 리눅스마스터
 
 ### 1-5. PostgreSQL 직접 운영 (DB)
