@@ -63,7 +63,7 @@
 - 공고: 🅢 DB / 🅓 RDB
 
 ### 1-6. 앱을 리눅스 서비스로 실행 (WAS)
-- [ ] 코드 배치, Python 가상환경, 의존성 설치, Alembic 마이그레이션
+- [ ] 코드 배치, Python 가상환경, 의존성 설치, Alembic 마이그레이션 → 코드 배치·venv·pip까지 진행 (`/opt/mysite-backend`, root 소유, 앱 실행 계정 `mysite`는 nologin)
 - [ ] **systemd 서비스**로 uvicorn 실행 — 서버 재부팅해도 자동으로 살아나게, 죽으면 재시작
 - [ ] 환경변수는 권한 600 파일로 (깃에 절대 안 올림)
 - 완료 확인: `sudo reboot` 후 아무것도 안 해도 앱이 떠 있다 / 프로세스를 `kill` 하면 다시 살아난다

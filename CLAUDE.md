@@ -91,7 +91,14 @@
   - ③ `127.0.0.1:5432`만 듣는 것 확인, pg_hba 기본값 읽기, `psql -h 127.0.0.1 -U mysite` 접속 성공. 외부 접속 실패는 학원에서 확인 → **집에서 `Test-NetConnection <IP> -Port 5432` 재확인**(학원 방화벽 때문일 수 있음)
   - 사용자가 못 맞힌 것: `-h` 없이 접속하면 peer 인증으로 거절되는 이유(설명함). "앱 롤에 최상위 권한 필요"라고 오해 → DB 소유자면 충분하다고 설명함
   - **다음 ④ (집에서)**: Neon에서 `pg_dump` → 서버에 복원 → 행 개수 비교(1-0 기준 rooms 17, pages 17, records 147. 그사이 늘었을 수 있으니 Neon에서도 다시 셀 것). 이번은 리허설이라 1-9 전환 때 다시 덤프해야 함. Neon 접속 주소에 비밀번호가 있으니 bash 기록에 남지 않게 하는 방법부터 고민시킬 것(`PGPASSWORD`를 명령 앞에 쓰는 것도 기록에 남음 → `~/.pgpass` 600 또는 프롬프트). 덤프 형식(plain vs custom `-Fc`)과 소유자 옵션(`--no-owner`, `--no-privileges`: Neon 롤 이름이 다를 것)도 질문거리
-- [ ] 1-6 ~ 1-12: ROADMAP.md 참고
+- [ ] **1-6 앱을 systemd 서비스로** ← 준비 A까지 진행 (2026-10-08 학원)
+  - 설계 결정: 앱 실행 계정 `mysite`(`--system`, nologin), 코드 `/opt/mysite-backend`(git clone, public 저장소), **코드·venv는 root 소유, 앱 실행 계정은 읽기만**(털려도 코드에 백도어를 못 심게). 앱은 디스크에 쓸 일이 없음(사진은 S3, 로그는 journald)
+  - 사용자가 "앱 사용자"를 서비스 고객으로 오해했었음 → "앱 실행 계정"이라고 부르기로 함. 이해한 핵심: "인터넷 입력을 직접 처리하는 계정이 가장 먼저 털리니 가장 적은 권한"
+  - 했다고 함: 패키지 설치, 계정 생성, clone, venv, pip install. **아직 확인 안 함** → 집에서 먼저: `getent passwd mysite`(nologin), `ls -l /opt/mysite-backend`(root), `.venv/bin/python -c "import psycopg2, boto3, fastapi"`, `free -h`·`df -h /` 측정 → MEASUREMENTS
+  - 남은 것 B: EC2 역할에 S3 권한 추가. 코드(`storage.py`)는 `put_object`만, 키는 `records/<uuid>.<ext>` → `s3:PutObject` on `arn:aws:s3:::<버킷>/records/*` 를 사용자가 코드에서 직접 찾아내게 할 것. 확인: 서버 venv의 boto3로 `records/` 업로드 성공 + 다른 경로 AccessDenied (테스트 객체는 콘솔에서 지우기). Render의 장기 키는 1-9 전환 후 삭제
+  - 남은 것 C(1-5 ④ 이후): 환경변수 파일(600, DB 비밀번호), systemd 유닛, 재부팅/`kill` 테스트
+  - 집에서 할 순서: 확인 → 1-5 ④ → 1-6 B → 1-6 C
+- [ ] 1-7 ~ 1-12: ROADMAP.md 참고
 
 측정 명령(PowerShell):
 ```powershell
