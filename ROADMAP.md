@@ -57,15 +57,16 @@
 ### 1-5. PostgreSQL 직접 운영 (DB)
 - [x] 설치, 앱 전용 DB 사용자/DB 생성 (슈퍼유저로 앱 돌리지 않기) → PGDG 저장소에서 **PostgreSQL 18**, 롤 `mysite`(속성 없음) + DB `mysite`(소유자 `mysite`)
 - [x] 외부 접속 차단 — 서버 안에서만 접속되게 (`listen_addresses`, `pg_hba.conf`) → 기본값 `localhost`·`127.0.0.1:5432` 확인. 학원에서 외부 접속 실패 확인(학원 방화벽일 수도 있어서 집에서 재확인)
-- [ ] Neon에서 `pg_dump` → 내 서버에 복원, 행 개수 비교로 데이터 이전 검증
+- [x] Neon에서 `pg_dump` → 내 서버에 복원, 행 개수 비교로 데이터 이전 검증 → 2026-10-17 리허설 완료: rooms 26 / pages 26 / records 150 / alembic_version 1, 덤프와 일치, 소유자 전부 `mysite`. 1-9 전환 때 같은 절차로 다시 덤프
 - 생각할 것: Neon(관리형)을 버리고 직접 운영하면 무엇을 얻고 무엇을 책임지게 되나?
 - 완료 확인: 서버 밖에서 5432 접속 시도 → 실패, 안에서는 성공
 - 공고: 🅢 DB / 🅓 RDB
 
 ### 1-6. 앱을 리눅스 서비스로 실행 (WAS)
-- [ ] 코드 배치, Python 가상환경, 의존성 설치, Alembic 마이그레이션 → 코드 배치·venv·pip까지 진행 (`/opt/mysite-backend`, root 소유, 앱 실행 계정 `mysite`는 nologin)
-- [ ] **systemd 서비스**로 uvicorn 실행 — 서버 재부팅해도 자동으로 살아나게, 죽으면 재시작
-- [ ] 환경변수는 권한 600 파일로 (깃에 절대 안 올림)
+- [x] 코드 배치, Python 가상환경, 의존성 설치, Alembic 마이그레이션 → `/opt/mysite-backend`(root 소유), 앱 실행 계정 `mysite`(nologin). 마이그레이션은 앱 시작 시 자동 (코드가 DB보다 오래돼서 실패 → 트러블슈팅 #8)
+- [x] **systemd 서비스**로 uvicorn 실행 — `mysite-backend.service`, `127.0.0.1:8000`, `Restart=always`, `ProtectSystem=strict` 등. 2026-10-17 확인: 재부팅 후 자동 기동, `kill -9` 후 새 PID로 복구, 실행 계정 `mysite`
+- [x] 환경변수는 권한 600 파일로 (깃에 절대 안 올림) → `/etc/mysite/backend.env`(root 600, systemd가 읽어서 주입). AWS 키 없음(EC2 역할)
+- [x] (추가) S3: 예전 버킷이 다른 계정·시드니라 이 계정 서울에 `mysite-photos-ddonni` 새로 만듦. 역할에 `records/*` PutObject만
 - 완료 확인: `sudo reboot` 후 아무것도 안 해도 앱이 떠 있다 / 프로세스를 `kill` 하면 다시 살아난다
 - 공고: 🅢 WAS, 리눅스 / 🅓 시스템
 

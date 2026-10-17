@@ -85,20 +85,36 @@
   - 사용자가 몰랐던 기초: 스왑이 무엇인지(백업으로 오해했음), `ls -l` 읽기, chmod 숫자, nano 사용법(브라우저에서 Ctrl+X가 안 먹을 때가 있음 → 한/영, F2). **리눅스 기초 개념은 단계를 시키기 전에 먼저 짧게 설명할 것.** 명령 이름만 주면 단계를 빠뜨림
   - ufw를 `80/tcp`, `443/tcp`로 좁히라고 제안함 → 했는지 미확인
   - 나중에 확인할 것: 자동 재부팅이 실제로 일어나는지(`journalctl --list-boots`). 전환 전에는 밤에 서버를 꺼서 확인 불가 → 1-9 이후
-- [ ] **1-5 PostgreSQL** ← 진행 중 (①②③ 2026-10-08 학원에서 완료, ④는 집에서)
+- [x] **1-5 PostgreSQL** (2026-10-17 완료)
+  - ④ 결과: 직접 연결(풀러 X) 주소, 비밀번호는 프롬프트, `--no-owner --no-privileges -f ~/pg_dump_result.sql`(600) → `psql -U mysite -v ON_ERROR_STOP=1 --single-transaction -f`. 행 수 덤프와 일치(rooms 26, pages 26, records 150, alembic 1), 소유자 전부 `mysite`. 검증은 awk로 덤프 파일의 COPY 줄 수와 비교(Neon 재접속 불필요)
+  - 이 과정에서 Neon 비밀번호 노출 → 교체 + Render 갱신 + 예전 값 거절 확인 (트러블슈팅 #7)
+  - 1-9 전환 때 같은 명령으로 최종 덤프. 리허설 덤프 파일은 전환 후 삭제
+  - 아래는 진행 중 메모(참고용)
   - ① PGDG 저장소에서 PostgreSQL 18 설치 (Neon과 버전 맞춤)
   - ② 롤 `mysite`(속성 없음, `\password`로 설정) + DB `mysite`(소유자 `mysite`). 비밀번호는 한 번 잃어버려서 재설정함 → 사용자 비밀번호 관리자에 보관
   - ③ `127.0.0.1:5432`만 듣는 것 확인, pg_hba 기본값 읽기, `psql -h 127.0.0.1 -U mysite` 접속 성공. 외부 접속 실패는 학원에서 확인 → **집에서 `Test-NetConnection <IP> -Port 5432` 재확인**(학원 방화벽 때문일 수 있음)
   - 사용자가 못 맞힌 것: `-h` 없이 접속하면 peer 인증으로 거절되는 이유(설명함). "앱 롤에 최상위 권한 필요"라고 오해 → DB 소유자면 충분하다고 설명함
   - **다음 ④ (집에서)**: Neon에서 `pg_dump` → 서버에 복원 → 행 개수 비교(1-0 기준 rooms 17, pages 17, records 147. 그사이 늘었을 수 있으니 Neon에서도 다시 셀 것). 이번은 리허설이라 1-9 전환 때 다시 덤프해야 함. Neon 접속 주소에 비밀번호가 있으니 bash 기록에 남지 않게 하는 방법부터 고민시킬 것(`PGPASSWORD`를 명령 앞에 쓰는 것도 기록에 남음 → `~/.pgpass` 600 또는 프롬프트). 덤프 형식(plain vs custom `-Fc`)과 소유자 옵션(`--no-owner`, `--no-privileges`: Neon 롤 이름이 다를 것)도 질문거리
-- [ ] **1-6 앱을 systemd 서비스로** ← 준비 A까지 진행 (2026-10-08 학원)
+- [x] **1-6 앱을 systemd 서비스로** (2026-10-17 완료)
+  - C 완료: `/etc/mysite/backend.env`(root 600, AWS 키 없음) + `/etc/systemd/system/mysite-backend.service`(User=mysite, 127.0.0.1:8000, Restart=always, NoNewPrivileges/ProtectSystem=strict/ProtectHome/PrivateTmp). 확인 5개 모두 통과(방 JSON, 실행 계정 mysite, kill -9 복구, 재부팅 후 자동 기동, 메모리 available 521Mi)
+  - 트러블슈팅 #8: 서버 코드(10/08 clone)가 DB(10/15 마이그레이션 b7d41e9c0a52)보다 오래돼서 무한 재시작 → `git pull` + pip. **1-9 전환 때 서버 코드를 운영과 같은 커밋으로 맞출 것**
+  - 서버 코드 업데이트 방법(지금은 수동): `sudo git -C /opt/mysite-backend pull` → `sudo .venv/bin/pip install -r requirements.txt` → `sudo systemctl restart mysite-backend`
+  - 아래는 진행 중 메모(참고용)
   - 설계 결정: 앱 실행 계정 `mysite`(`--system`, nologin), 코드 `/opt/mysite-backend`(git clone, public 저장소), **코드·venv는 root 소유, 앱 실행 계정은 읽기만**(털려도 코드에 백도어를 못 심게). 앱은 디스크에 쓸 일이 없음(사진은 S3, 로그는 journald)
   - 사용자가 "앱 사용자"를 서비스 고객으로 오해했었음 → "앱 실행 계정"이라고 부르기로 함. 이해한 핵심: "인터넷 입력을 직접 처리하는 계정이 가장 먼저 털리니 가장 적은 권한"
-  - 했다고 함: 패키지 설치, 계정 생성, clone, venv, pip install. **아직 확인 안 함** → 집에서 먼저: `getent passwd mysite`(nologin), `ls -l /opt/mysite-backend`(root), `.venv/bin/python -c "import psycopg2, boto3, fastapi"`, `free -h`·`df -h /` 측정 → MEASUREMENTS
-  - 남은 것 B: EC2 역할에 S3 권한 추가. 코드(`storage.py`)는 `put_object`만, 키는 `records/<uuid>.<ext>` → `s3:PutObject` on `arn:aws:s3:::<버킷>/records/*` 를 사용자가 코드에서 직접 찾아내게 할 것. 확인: 서버 venv의 boto3로 `records/` 업로드 성공 + 다른 경로 AccessDenied (테스트 객체는 콘솔에서 지우기). Render의 장기 키는 1-9 전환 후 삭제
+  - 2026-10-17 집에서 확인 완료: `mysite` nologin(UID 999), `/opt/mysite-backend` 폴더·내용 root 소유 755/644, import OK. venv가 비어 있어서 재설치함(트러블슈팅 #6, 원인 미확인). 메모리·디스크는 MEASUREMENTS 2-1에 기록(디스크 65%, available 479Mi)
+  - ufw는 여전히 `80`, `443`(tcp/udp 둘 다). `/tcp`로 좁힐지 사용자 결정 대기. 집에서 `Test-NetConnection <IP> -Port 5432` → TCP 실패 + ping TimedOut 확인(2026-10-17). 1-5 ③ 외부 차단 완료
+  - **B 완료 (2026-10-17)**: 예전 버킷 `mysite-buckets`(시드니)은 **다른(주인 불명) AWS 계정**이라 교차 계정 대신 **이 계정 서울에 새 버킷 `mysite-photos-ddonni`** 생성. ACL 비활성화, 퍼블릭 차단은 ACL 두 개만 켬, 버킷 정책 = `records/*` 공개 GetObject만. EC2 역할 인라인 정책 = `s3:PutObject` on `mysite-photos-ddonni/records/*`. 확인: records/ OK, 맨 위 AccessDenied, PC에서 공개 GET 200
+    - 예전 사진(119장, 5.4MB)은 DB에 전체 URL로 있어서 예전 버킷에서 계속 보임 → **평일에 새 버킷으로 복사 + DB `photo_url` 치환**해서 주인 불명 계정 의존을 끊을 것
+    - 사고: 사용자가 Render 환경변수를 새 버킷으로 바꿨다가(Render엔 역할이 없어 업로드가 깨짐) 원래대로 되돌려 재배포. 업로드 실제 확인 여부 미확인
+    - 로컬: pytest는 FakeS3라 AWS 불필요. 로컬 docker의 `.env`는 당분간 예전 버킷·키 유지
+    - 1-7 메모: `_client_ip`가 X-Forwarded-For의 **첫 번째** 값을 씀 → Nginx에서 `$proxy_add_x_forwarded_for`(덧붙이기)로 하면 클라이언트가 위조 가능. `X-Forwarded-For $remote_addr`로 덮어쓸 것
+  - (이전 메모) 남은 것 B: EC2 역할에 S3 권한 추가. 코드(`storage.py`)는 `put_object`만, 키는 `records/<uuid>.<ext>` → `s3:PutObject` on `arn:aws:s3:::<버킷>/records/*` 를 사용자가 코드에서 직접 찾아내게 할 것. 확인: 서버 venv의 boto3로 `records/` 업로드 성공 + 다른 경로 AccessDenied (테스트 객체는 콘솔에서 지우기). Render의 장기 키는 1-9 전환 후 삭제
   - 남은 것 C(1-5 ④ 이후): 환경변수 파일(600, DB 비밀번호), systemd 유닛, 재부팅/`kill` 테스트
   - 집에서 할 순서: 확인 → 1-5 ④ → 1-6 B → 1-6 C
 - [ ] 1-7 ~ 1-12: ROADMAP.md 참고
+  - 2026-10-17(토) 사용자가 "이번 주말 안에 끝내자, 속도 올리자" → 명령을 바로 주는 모드. 계획: 토 = 1-5 ④·1-6 B·C / 일 = 1-7·1-8·1-9 전환 / 평일 = 1-10~1-12
+  - **1-8 도메인: 무료 서브도메인(DuckDNS 등)으로 결정** (2026-10-17). 시작할 때 Elastic IP부터 붙일 것
 
 측정 명령(PowerShell):
 ```powershell
