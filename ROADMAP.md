@@ -71,8 +71,8 @@
 - 공고: 🅢 WAS, 리눅스 / 🅓 시스템
 
 ### 1-7. Nginx 리버스 프록시 (WEB)
-- [ ] Nginx가 80/443을 받고 uvicorn으로 넘긴다 (uvicorn은 외부에 직접 안 열기)
-- [ ] **WebSocket 프록시 설정** — 스케치북 실시간 동기화가 끊기지 않게 (여기서 한 번은 막힐 확률 높음 → 트러블슈팅 기록감)
+- [x] Nginx가 80/443을 받고 uvicorn으로 넘긴다 (uvicorn은 외부에 직접 안 열기) → 2026-10-18: 80 → `127.0.0.1:8000`, 8000 외부 차단 확인. `X-Forwarded-For $remote_addr`(덮어쓰기), `client_max_body_size 11m`
+- [x] **WebSocket 프록시 설정** — `proxy_http_version 1.1` + Upgrade/Connection 헤더(`map`). 핸드셰이크 101, **211초 유지 후 정상 종료**(양쪽 20초 ping으로 Nginx 60초 유휴 타임아웃에 안 걸림). 조사하다 앱 쪽 문제 둘 발견·수정: 로그가 꺼져 있음(트러블슈팅 #9), PostgreSQL 재시작 후 첫 요청 500(#10)
 - 완료 확인: 브라우저 개발자도구에서 WebSocket 연결이 101로 열리고 몇 분 놔둬도 유지된다
 - 공고: 🅢 WEB/WAS
 

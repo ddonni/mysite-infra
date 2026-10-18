@@ -115,6 +115,9 @@
 - [ ] 1-7 ~ 1-12: ROADMAP.md 참고
   - 2026-10-17(토) 사용자가 "이번 주말 안에 끝내자, 속도 올리자" → 명령을 바로 주는 모드. 계획: 토 = 1-5 ④·1-6 B·C / 일 = 1-7·1-8·1-9 전환 / 평일 = 1-10~1-12
   - **1-8 도메인: 무료 서브도메인(DuckDNS 등)으로 결정** (2026-10-17). 시작할 때 Elastic IP부터 붙일 것
+  - **1-7 완료 (2026-10-18)**: 아래 설정 그대로 적용. WebSocket 101 + 211초 유지(Claude가 집 PC에서 Python websockets로 테스트). 백엔드 수정 2개 push: `227fbcd` 로그 꺼짐 수정(#9), `78bf72d` `pool_pre_ping`(#10, 대조 실험으로 고치기 전 500 / 고친 후 200 확인 — 사용자가 "고치기 전에 500 나는지도 봐야 하지 않냐"고 먼저 짚음). 서버를 `checkout main`으로 되돌렸는지 결과 미확인 → 다음에 `git -C /opt/mysite-backend log --oneline -1` = 78bf72d 확인
+    - 다음: 1-8 (Elastic IP → DuckDNS → certbot), `server_name` 도메인으로 교체
+  - (완료된 계획 메모) **1-7 다음 시작점 (2026-10-18 예정)**: 10-17 밤에 Nginx 설정 안(아직 실행 안 함)을 줬음 — `map $http_upgrade`, `proxy_http_version 1.1`, Upgrade/Connection 헤더, `X-Forwarded-For $remote_addr`(덮어쓰기, 위조 방지), `client_max_body_size 11m`(기본 1MB면 사진 413), default 사이트 제거, `nginx -t` → reload → `nginx -T`로 적용 확인. 테스트: PC에서 `/health`, 8000 외부 차단, curl WebSocket 핸드셰이크 101, **Claude가 집 PC에서 Python websockets로 3분 유지 테스트**(Nginx 기본 60초 유휴 타임아웃 vs uvicorn 20초 ping)
 
 측정 명령(PowerShell):
 ```powershell
