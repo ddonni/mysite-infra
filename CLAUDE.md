@@ -77,7 +77,7 @@
   - SSM 접속 성공(`ssm-user`), IMDS 토큰 없으면 401 / 토큰 있으면 인스턴스 ID 직접 확인
   - 트러블슈팅 #3: SSM 기본 셸이 `sh`라 줄 편집 불가 → `bash`
   - 사용자가 헷갈렸던 개념: 기계 권한에 또 "액세스 키"를 떠올림(→ 역할), SSM은 서버가 **나가는** 연결, EBS는 켠 채로 확장 가능, wheel 파일 이름 읽기(`aarch64` = 리눅스 ARM)
-  - 비용: 전환 전까지는 작업할 때만 인스턴스를 켜기로 함 → 세션 끝날 때 중지했는지 물어볼 것
+  - 비용: 전환 전까지는 작업할 때만 인스턴스를 켜기로 했음 → **2026-10-18 전환 후로는 항상 켜 둠(중지 금지)**
 - [x] **1-4 리눅스 기본 세팅** (2026-10-08 완료)
   - sshd 끔(`ssh.socket`+`ssh.service` disable, socket activation), ufw 80/443, unattended-upgrades 확인 + 자동 재부팅 04:00(`52unattended-upgrades-local`), Asia/Seoul, `/swapfile` 1GB + swappiness 10(`/etc/sysctl.d/99-swappiness.conf`)
   - SSM Session Manager 기본 설정에 `exec bash` 넣음 (한국어 콘솔: 노드 도구 → 세션 관리자 → 기본 설정)
@@ -119,7 +119,11 @@
   - **1-8 완료 (2026-10-18)**: Elastic IP + **`https://mysite-ddonni.duckdns.org`** (DuckDNS, 토큰은 비밀). certbot(apt판) `--nginx --redirect`, 만료 2027-01-16, `certbot.timer` + dry-run 성공. wss 210초 유지. 응답 시간 /health 0.057초(Render 0.329) → MEASUREMENTS 2-2a, 1-0 리전 가설 확인
     - 사고: `sed`에 `<이름>` 자리표시를 그대로 넣어 실행 → 이후 **사용자에게 줄 명령은 실제 값으로 채워서** 줄 것(모르면 먼저 물어보기)
     - 비용: 월 약 $12(+VAT 약 $13): t4g.micro ~$7.6, 퍼블릭 IPv4 $3.65(EIP는 중지해도 과금), EBS ~$0.73. MEASUREMENTS 2-2에 적을지 물어봤음(답 없음)
-    - 다음: **1-9 전환** — 롤백 계획부터. 사용자에게 던진 질문: "무엇을 바꿔서 Render로 되돌리나, 그사이 내 서버에 쌓인 데이터는?"
+  - **1-9 전환 완료 (2026-10-18 21:21)** — 절차·기록은 `CUTOVER.md`. 최종 덤프 rooms 26 / pages 26 / records 151. 프런트 `53fb4ff`. 브라우저 체크리스트 통과. **병행 운영 중**: Render·Neon은 롤백용으로 유지
+    - ⚠️ **이제 EC2가 운영 서버다. 인스턴스를 중지하지 말 것**(1-3의 "작업할 때만 켜기"는 끝). 새벽 자동 업데이트·04:00 재부팅이 운영에 영향 → `pool_pre_ping`으로 대비됨
+    - ⚠️ **백업이 아직 없다**: 운영 데이터가 EBS 하나에만 있음. Neon은 전환 시점 사본일 뿐 → 1-10을 최우선으로
+    - 남은 정리(병행 운영 후): Render 서비스 삭제, 예전 계정의 장기 키 삭제, Neon 정리 여부, 덤프 파일 삭제, 예전 사진 새 버킷으로 복사 + `photo_url` 치환
+  - (이전) 다음: **1-9 전환** — 롤백 계획부터. 사용자에게 던진 질문: "무엇을 바꿔서 Render로 되돌리나, 그사이 내 서버에 쌓인 데이터는?"
   - (완료) 1-8 계획: Elastic IP → DuckDNS → certbot, `server_name` 도메인으로 교체
   - (완료된 계획 메모) **1-7 다음 시작점 (2026-10-18 예정)**: 10-17 밤에 Nginx 설정 안(아직 실행 안 함)을 줬음 — `map $http_upgrade`, `proxy_http_version 1.1`, Upgrade/Connection 헤더, `X-Forwarded-For $remote_addr`(덮어쓰기, 위조 방지), `client_max_body_size 11m`(기본 1MB면 사진 413), default 사이트 제거, `nginx -t` → reload → `nginx -T`로 적용 확인. 테스트: PC에서 `/health`, 8000 외부 차단, curl WebSocket 핸드셰이크 101, **Claude가 집 PC에서 Python websockets로 3분 유지 테스트**(Nginx 기본 60초 유휴 타임아웃 vs uvicorn 20초 ping)
 
