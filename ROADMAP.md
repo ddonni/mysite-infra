@@ -77,8 +77,8 @@
 - 공고: 🅢 WEB/WAS
 
 ### 1-8. 도메인과 HTTPS
-- [ ] 도메인 결정 (구매 vs 무료 서브도메인) → DNS A 레코드
-- [ ] Let's Encrypt 인증서 + **자동 갱신이 실제로 예약돼 있는지** 확인
+- [x] 도메인 결정 (구매 vs 무료 서브도메인) → DNS A 레코드 → 2026-10-18: Elastic IP 할당·연결 + DuckDNS `mysite-ddonni.duckdns.org`
+- [x] Let's Encrypt 인증서 + **자동 갱신이 실제로 예약돼 있는지** 확인 → `certbot --nginx --redirect`, ECDSA, 만료 2027-01-16. `certbot.timer` 예약 + `renew --dry-run` 성공. HTTP→HTTPS 301, `https://.../health` 200, `wss://` 210초 유지
 - 생각할 것: 프런트(GitHub Pages)가 HTTPS인데 백엔드가 HTTP면 브라우저는 왜 막나?
 - 완료 확인: `https://내도메인`으로 API 응답, 인증서 만료일 확인
 - 공고: 🅢 NW / 🅓 네트워크
