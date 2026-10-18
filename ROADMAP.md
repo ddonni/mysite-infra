@@ -92,8 +92,9 @@
 - 공고: 🅢 구축·운영 / 🅓 서비스 안정성
 
 ### 1-10. 백업과 복구 훈련
-- [ ] 매일 `pg_dump` → S3 업로드 (systemd timer 또는 cron), 오래된 백업 자동 삭제
-- [ ] **복구 훈련**: 새 DB에 백업을 복원해서 데이터 확인, 걸린 시간 측정
+- [x] 매일 `pg_dump` → S3 업로드 (systemd timer 또는 cron), 오래된 백업 자동 삭제 → 2026-10-18: `mysite-db-backup.timer`(03:30) + `.service`(User=postgres, peer 인증이라 비밀번호 파일 없음) + `/usr/local/bin/mysite-db-backup`. 비공개 버킷 `mysite-backups-ddonni`, 수명 주기 14일. 역할은 `db/*` Put/Get만(삭제 권한 없음)
+- [x] **복구 훈련**: 새 DB에 백업을 복원해서 데이터 확인, 걸린 시간 측정 → 0.823초, 행 수 일치. RPO 24시간 / RTO는 MEASUREMENTS 2-2b
+- [ ] (남은 것) 타이머가 실제로 새벽에 돌았는지 다음 날 확인. 백업 실패 알림은 2단계(관측성)에서
 - 완료 확인: "어제 백업에서 몇 분 안에 복구 가능"을 숫자로 말할 수 있다
 - 공고: 🅢 DB, 장애 처리
 
