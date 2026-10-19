@@ -125,6 +125,12 @@
     - ~~백업이 아직 없다~~ → **1-10 완료 (2026-10-18 밤)**: 매일 03:30 pg_dump → `mysite-backups-ddonni`(비공개, 14일 만료), 복구 훈련 0.823초·행 수 일치. 다음 날 `systemctl list-timers` / `sudo journalctl -u mysite-db-backup --since yesterday`로 새벽 실행 확인할 것
     - 결정 기록: 사용자가 "서버 꺼 두면 안 되나", "꺼지면 자동으로 Render로 넘기면?"을 물음 → **켜 두기로**(월 $12, 운영 경험이 목적). 자동 장애 조치는 DB가 둘로 갈라지는 스플릿 브레인(Render는 전환 시점의 Neon을 봄) 때문에 기각, 수동 롤백(CUTOVER.md) + 백업으로 대응
     - **2026-10-19 아침 점검 완료** (학원): 03:30 백업 성공 + S3 파일 확인, 04:00 자동 재부팅 실제 발생(다운타임 약 19초, MEASUREMENTS 2-2c), 서버 코드 `78bf72d`, `openssh-server` 업데이트 후에도 ssh 유닛 disabled. 1-4의 "자동 재부팅 실제 확인"도 이걸로 완료. 사용자가 `journalctl`은 sudo가 필요하다는 걸 직접 발견
+    - **1-11 디스크 가득 참 실험 계획** (2026-10-19 학원에서 설계, 실행은 늦은 밤 23~01시. 03:30 백업·04:00 재부팅과 겹치지 않게)
+      - 준비: `sudo systemctl start mysite-db-backup`(직전 백업) + EC2 콘솔에서 EBS 스냅샷 + `df -h /` 기준값 기록
+      - 채우기: `sudo fallocate -l <크기> /var/tmp/diskfill.img` → 단계 A 80% / B 95% / C 100% / D 파일 삭제 후 회복 여부. E(EBS 확장)는 **방법만 정리**하기로 함(되돌릴 수 없어서)
+      - 예약 블록 0 확인(`tune2fs`: Reserved block count 0, Ubuntu 클라우드 이미지) → root도 같이 막힘. 일단 0인 채로 실험하고 `tune2fs -m 1`은 결과 보고 결정
+      - **사용자 예측**: 100%에서 ① 방 읽기 ✗ ② 그림 저장 ✗ ③ journald 로그 ✗, ④ 파일 지우면 저절로 회복 ○ → 실험 후 예측 vs 관찰을 TROUBLESHOOTING에 기록(①은 예측과 다를 수 있다고 힌트만 줬음)
+      - 되돌리기: `rm` → 필요하면 서비스 재시작 → DB 꼬이면 직전 백업 `pg_restore` → 최후엔 스냅샷 복원
     - 남은 정리(병행 운영 후): Render 서비스 삭제, 예전 계정의 장기 키 삭제, Neon 정리 여부, 덤프 파일 삭제, 예전 사진 새 버킷으로 복사 + `photo_url` 치환
   - (이전) 다음: **1-9 전환** — 롤백 계획부터. 사용자에게 던진 질문: "무엇을 바꿔서 Render로 되돌리나, 그사이 내 서버에 쌓인 데이터는?"
   - (완료) 1-8 계획: Elastic IP → DuckDNS → certbot, `server_name` 도메인으로 교체
