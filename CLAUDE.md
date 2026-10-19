@@ -126,6 +126,7 @@
     - 결정 기록: 사용자가 "서버 꺼 두면 안 되나", "꺼지면 자동으로 Render로 넘기면?"을 물음 → **켜 두기로**(월 $12, 운영 경험이 목적). 자동 장애 조치는 DB가 둘로 갈라지는 스플릿 브레인(Render는 전환 시점의 Neon을 봄) 때문에 기각, 수동 롤백(CUTOVER.md) + 백업으로 대응
     - **2026-10-19 아침 점검 완료** (학원): 03:30 백업 성공 + S3 파일 확인, 04:00 자동 재부팅 실제 발생(다운타임 약 19초, MEASUREMENTS 2-2c), 서버 코드 `78bf72d`, `openssh-server` 업데이트 후에도 ssh 유닛 disabled. 1-4의 "자동 재부팅 실제 확인"도 이걸로 완료. 사용자가 `journalctl`은 sudo가 필요하다는 걸 직접 발견
     - **1-11 PostgreSQL 중지 실험 완료 (2026-10-19 20:56)** — 트러블슈팅 #11. `DATABASE_URL`에 `?sslmode=disable` 추가(ProtectHome + libpq sslmode=prefer 충돌). 2단계 할 일: DB까지 보는 readiness 체크(`/health`는 DB 죽어도 healthy)
+    - **1-12 초안 (2026-10-19 밤)**: README에 한눈에 보기·mermaid 구성도·1-6~1-11 선택 근거·비용·롤백·복구 표 추가, MEASUREMENTS 2-3 채움. 남은 것: 사용자가 읽고 고치기, push 후 GitHub에서 mermaid 렌더링 확인, 10월 실제 청구액(11월 초), 병행 운영 종료 작업
     - **1-11 완료 (2026-10-19 21:14)**: 디스크 100% 실험 → 트러블슈팅 #12. 읽기 ○ / 저장 500은 Nginx(`/var/lib/nginx/body` 임시 파일 실패, 앱 로그엔 없음) / journald는 남음(미리 잡아 둔 공간) / 삭제하면 저절로 회복. 안전장치 `systemd-run --on-active=15min rm` 걸고 진행 후 해제. EBS 확장은 방법만 정리. journald 상한 200M. 2단계 할 일 추가: **디스크 사용률 알림**(80%)
     - (실행 전 계획 메모) **1-11 디스크 가득 참 실험 계획** (2026-10-19 학원에서 설계, 실행은 늦은 밤 23~01시. 03:30 백업·04:00 재부팅과 겹치지 않게)
       - 준비: `sudo systemctl start mysite-db-backup`(직전 백업) + EC2 콘솔에서 EBS 스냅샷 + `df -h /` 기준값 기록
