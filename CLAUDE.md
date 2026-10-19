@@ -54,7 +54,7 @@
 ## 진행 상황
 
 ### 1단계 — 리눅스 서버 한 대에 직접 올리기
-- [ ] 저장소 정리: `ROADMAP.md`, `MEASUREMENTS.md`, `TROUBLESHOOTING.md`
+- [x] 저장소 정리: `ROADMAP.md`, `MEASUREMENTS.md`, `TROUBLESHOOTING.md` (+ `README.md`, `CUTOVER.md`)
 - [x] **1-0 이사 전 측정** (2026-10-05 완료, 숫자는 `MEASUREMENTS.md`)
   - 백엔드에 `GET /health`(DB 안 씀) 추가해서 배포. DB 경로 측정은 운영 방 `TTHB8N` 사용
   - 콜드 스타트 3회 모두 약 22.6초 = 앱 기동 시간(배포 로그: 컨테이너 ~14초 + import ~1초 + lifespan DB/alembic ~7초)
@@ -113,7 +113,7 @@
   - (이전 메모) 남은 것 B: EC2 역할에 S3 권한 추가. 코드(`storage.py`)는 `put_object`만, 키는 `records/<uuid>.<ext>` → `s3:PutObject` on `arn:aws:s3:::<버킷>/records/*` 를 사용자가 코드에서 직접 찾아내게 할 것. 확인: 서버 venv의 boto3로 `records/` 업로드 성공 + 다른 경로 AccessDenied (테스트 객체는 콘솔에서 지우기). Render의 장기 키는 1-9 전환 후 삭제
   - 남은 것 C(1-5 ④ 이후): 환경변수 파일(600, DB 비밀번호), systemd 유닛, 재부팅/`kill` 테스트
   - 집에서 할 순서: 확인 → 1-5 ④ → 1-6 B → 1-6 C
-- [ ] 1-7 ~ 1-12: ROADMAP.md 참고
+- [~] 1-7 ~ 1-12: 1-7~1-11 완료, 1-12는 README 사용자 검토만 남음. 1-9 병행 운영 종료(Render 정리, 예전 사진 이전) 남음 — 세부는 아래 메모와 ROADMAP.md
   - 2026-10-17(토) 사용자가 "이번 주말 안에 끝내자, 속도 올리자" → 명령을 바로 주는 모드. 계획: 토 = 1-5 ④·1-6 B·C / 일 = 1-7·1-8·1-9 전환 / 평일 = 1-10~1-12
   - **1-8 도메인: 무료 서브도메인(DuckDNS 등)으로 결정** (2026-10-17). 시작할 때 Elastic IP부터 붙일 것
   - **1-7 완료 (2026-10-18)**: 아래 설정 그대로 적용. WebSocket 101 + 211초 유지(Claude가 집 PC에서 Python websockets로 테스트). 백엔드 수정 2개 push: `227fbcd` 로그 꺼짐 수정(#9), `78bf72d` `pool_pre_ping`(#10, 대조 실험으로 고치기 전 500 / 고친 후 200 확인 — 사용자가 "고치기 전에 500 나는지도 봐야 하지 않냐"고 먼저 짚음). 서버를 `checkout main`으로 되돌렸는지 결과 미확인 → 다음에 `git -C /opt/mysite-backend log --oneline -1` = 78bf72d 확인
