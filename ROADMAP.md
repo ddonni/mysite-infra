@@ -101,8 +101,8 @@
 ### 1-11. 일부러 고장 내기 (장애 대응 연습)
 - [x] 앱 프로세스 강제 종료 → 자동 복구되는지 → 1-6에서 확인(`kill -9` 후 3초 안에 새 PID, 2026-10-17)
 - [x] PostgreSQL 중지 → 사이트는 어떻게 보이고, 로그(`journalctl`, Nginx error log)엔 뭐가 남나 → 2026-10-19 트러블슈팅 #11: 예측 4개 적중, `/health`는 거짓 healthy(readiness 체크 필요), ProtectHome 때문에 SSL 시도가 매번 실패하던 문제 발견 → `sslmode=disable`
-- [ ] 디스크·메모리 부족 상황 확인 방법 익히기 (`df`, `free`, `top`)
-- [ ] 8GB 디스크를 일부러 가득 채워 보고 → 서버를 켠 채로 EBS 볼륨 확장 (1-3에서 일부러 8GB로 둠)
+- [x] 디스크·메모리 부족 상황 확인 방법 익히기 (`df`, `free`, `top`) → `df -h`, `free -h`(available을 볼 것), `ps -eo rss,... --sort=-rss`로 범인 찾기(10/17 unattended-upgrades 119MB)
+- [x] 8GB 디스크를 일부러 가득 채워 보고 → 서버를 켠 채로 EBS 볼륨 확장 (1-3에서 일부러 8GB로 둠) → 2026-10-19 트러블슈팅 #12: 100%에서 읽기 ○, 그림 저장 500(**Nginx** 본문 임시 파일 실패), 파일 삭제로 저절로 회복. 볼륨 확장은 되돌릴 수 없어서 **방법만 정리**(#12 아래)
 - [x] 로그가 디스크를 채우지 않게 로그 로테이션 확인 → 2026-10-19: Nginx는 logrotate 매일 00:00·14개·압축(실제로 돈 것 확인). journald는 기본 상한이 디스크의 10%(≈680MB)라 `/etc/systemd/journald.conf.d/size.conf`로 **SystemMaxUse=200M**(현재 94MB, 하루 약 8MB → 약 25일 보관)
 - 완료 확인: 각 실험이 `TROUBLESHOOTING.md`에 기록돼 있다
 - 공고: 🅢 장애 처리·트러블슈팅 / 🅓 서비스 안정성
