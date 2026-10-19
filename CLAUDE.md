@@ -125,6 +125,7 @@
     - ~~백업이 아직 없다~~ → **1-10 완료 (2026-10-18 밤)**: 매일 03:30 pg_dump → `mysite-backups-ddonni`(비공개, 14일 만료), 복구 훈련 0.823초·행 수 일치. 다음 날 `systemctl list-timers` / `sudo journalctl -u mysite-db-backup --since yesterday`로 새벽 실행 확인할 것
     - 결정 기록: 사용자가 "서버 꺼 두면 안 되나", "꺼지면 자동으로 Render로 넘기면?"을 물음 → **켜 두기로**(월 $12, 운영 경험이 목적). 자동 장애 조치는 DB가 둘로 갈라지는 스플릿 브레인(Render는 전환 시점의 Neon을 봄) 때문에 기각, 수동 롤백(CUTOVER.md) + 백업으로 대응
     - **2026-10-19 아침 점검 완료** (학원): 03:30 백업 성공 + S3 파일 확인, 04:00 자동 재부팅 실제 발생(다운타임 약 19초, MEASUREMENTS 2-2c), 서버 코드 `78bf72d`, `openssh-server` 업데이트 후에도 ssh 유닛 disabled. 1-4의 "자동 재부팅 실제 확인"도 이걸로 완료. 사용자가 `journalctl`은 sudo가 필요하다는 걸 직접 발견
+    - **1-11 PostgreSQL 중지 실험 완료 (2026-10-19 20:56)** — 트러블슈팅 #11. `DATABASE_URL`에 `?sslmode=disable` 추가(ProtectHome + libpq sslmode=prefer 충돌). 2단계 할 일: DB까지 보는 readiness 체크(`/health`는 DB 죽어도 healthy)
     - **1-11 디스크 가득 참 실험 계획** (2026-10-19 학원에서 설계, 실행은 늦은 밤 23~01시. 03:30 백업·04:00 재부팅과 겹치지 않게)
       - 준비: `sudo systemctl start mysite-db-backup`(직전 백업) + EC2 콘솔에서 EBS 스냅샷 + `df -h /` 기준값 기록
       - 채우기: `sudo fallocate -l <크기> /var/tmp/diskfill.img` → 단계 A 80% / B 95% / C 100% / D 파일 삭제 후 회복 여부. E(EBS 확장)는 **방법만 정리**하기로 함(되돌릴 수 없어서)
