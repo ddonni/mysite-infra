@@ -213,3 +213,44 @@ health 체크 배포 때의 로그 시각으로 나눈 것. 잠든 상태에서 
 | RTO(서버 통째로) | 수 시간 (손으로 재구축) | → 2단계 Terraform으로 줄일 대상 |
 | 장애 실험 | 앱 종료, DB 중지, 디스크 100% | 트러블슈팅 #11, #12 |
 | 월 비용 | 0원 → 약 $12 + VAT (추정, 실제 청구액은 아래 2-2에) | t4g.micro ~$7.6, 퍼블릭 IPv4 $3.65, EBS ~$0.73 |
+
+### 2-4. 콜드 스타트 비교 — 같은 시각, 10회 (예정: 2026-10-22 밤, 집)
+
+강사님 조언(2026-10-22): 포트폴리오에 "Render 콜드 스타트 → EC2"를 10회 정도 비교한 수치로 남기면 좋다.
+1-1의 콜드 스타트는 3회뿐이고 EC2 쪽은 같은 조건으로 잰 적이 없어서 새로 잰다.
+
+- **조건을 맞춤**: "15분 넘게 아무도 오지 않다가 온 첫 요청". 16분 쉬고 Render와 EC2의 `/health`를 **같은 시각에** 한 번씩, 10회 (약 2시간 40분)
+- **위치**: 집 (1-0과 같은 곳). 측정 중에는 PC 절전 끄기, Render 주소 열지 않기(열면 그 회차는 콜드 스타트가 아님)
+- **Render를 지우기 전에** 잴 것 — 병행 운영 종료(1-9)는 이 측정 뒤로
+- 기록할 때는 1-0에서 정한 대로 **원인과 같이** 쓴다: 숫자가 준 이유는 "잠들지 않는 서버"(앱 기동 약 22초 제거)와 "리전"(오리건 → 서울)이다
+
+측정 명령 (PowerShell, 결과는 `$HOME\coldstart.csv`):
+
+```powershell
+$out = "$HOME\coldstart.csv"
+"round,kst,server,dns,tcp,tls,ttfb,total,code" | Out-File $out -Encoding utf8
+$fmt = '%{time_namelookup},%{time_connect},%{time_appconnect},%{time_starttransfer},%{time_total},%{http_code}'
+foreach ($i in 1..10) {
+  Start-Sleep -Seconds 960
+  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+  $r = curl.exe -s -o NUL -m 120 -w $fmt https://sketchbook-api.onrender.com/health
+  $e = curl.exe -s -o NUL -m 120 -w $fmt https://mysite-ddonni.duckdns.org/health
+  "$i,$ts,render,$r" | Add-Content $out -Encoding utf8
+  "$i,$ts,ec2,$e"    | Add-Content $out -Encoding utf8
+  "round $i $ts  render=$r  ec2=$e"
+}
+```
+
+| # | 시각 (KST) | Render total | EC2 total | 메모 |
+|---|---|---|---|---|
+| 1 | | | | |
+| 2 | | | | |
+| 3 | | | | |
+| 4 | | | | |
+| 5 | | | | |
+| 6 | | | | |
+| 7 | | | | |
+| 8 | | | | |
+| 9 | | | | |
+| 10 | | | | |
+| **평균** | | | | |
