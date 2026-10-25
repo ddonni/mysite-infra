@@ -98,6 +98,8 @@ curl.exe -s https://ddonni.github.io/mysite/js/shared/config.js | Select-String 
 
 ## 롤백
 
+> **2026-10-25 병행 운영 종료로 Render·Neon을 삭제해서, 아래 롤백 A/B는 더 이상 쓸 수 없다.** 전환 기간에 쓰려고 세운 계획으로 기록만 남긴다. 지금 EC2에 큰 문제가 생기면 서버를 다시 만들고 S3 백업으로 복원한다(README "롤백·복구 방법").
+
 ### 언제 롤백하나
 
 - 사이트의 핵심 기능(그림 저장·동기화, 기록 보기·저장)이 **10분 넘게** 안 되고, 원인을 바로 못 고칠 때
@@ -124,4 +126,4 @@ curl.exe -s https://ddonni.github.io/mysite/js/shared/config.js | Select-String 
 | 2026-10-18 21:19 | 2 DB 교체 | dropdb → createdb → 복원. rooms 26 / pages 26 / records 151 / alembic 1, 덤프와 일치. 앱 21:19:58 시작 |
 | 2026-10-18 21:20:30 | 3 프런트 push | `mysite` `53fb4ff`. **Pages 배포 확인 21:21:08** (push 후 약 40초). 최종 덤프 ~ 배포 사이가 데이터 손실 가능 구간 |
 | 2026-10-18 저녁 | 4 브라우저 확인 | 사용자가 체크리스트 확인 완료 (API·WebSocket이 새 도메인으로, 저장·실시간 반영, 기록·사진). **전환 완료, 병행 운영 시작** |
-| | 5 병행 운영 종료 | (며칠 뒤) |
+| 2026-10-25 | 5 병행 운영 종료 | 예전 사진 149장을 새 버킷으로 옮김(트러블슈팅 #13). **Render 서비스·Neon 프로젝트 삭제**(예전 계정 장기 키가 든 Render 환경변수도 함께), 서버의 덤프 파일 삭제, GitHub의 Render 앱 연결 해제, 백엔드 `render.yaml` 삭제. **이 시점부터 아래 롤백 A/B는 쓸 수 없다** |

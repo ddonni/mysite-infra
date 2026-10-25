@@ -21,7 +21,7 @@ mysite 백엔드(FastAPI + PostgreSQL + WebSocket)를 Render 무료 플랜에서
 | [ROADMAP.md](ROADMAP.md) | 단계별 체크리스트와 완료 확인 |
 | [MEASUREMENTS.md](MEASUREMENTS.md) | 이사 전후 측정, 메모리·디스크, 백업·복구, 비용 |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 증상 → 원인 추측 → 확인한 것 → 진짜 원인 → 해결 → 배운 점 |
-| [CUTOVER.md](CUTOVER.md) | 전환 절차서, 롤백 A/B, 실행 기록 |
+| [CUTOVER.md](CUTOVER.md) | 전환 절차서, 전환 기간의 롤백 계획, 실행 기록 |
 
 ## 구성도
 
@@ -149,6 +149,7 @@ flowchart LR
 - 전환 스위치는 프런트 `config.js`의 `API_BASE` 한 줄이다. 롤백도 그 커밋을 revert하면 된다. 롤백 스위치가 GitHub에 있으니, **EC2가 통째로 죽어도 되돌릴 수 있다.** Nginx 설정으로 되돌리는 방식은, 고장 난 서버로 고장을 해결해야 해서 롤백 수단이 될 수 없다.
 - **자동 장애 조치는 하지 않았다**: "EC2가 죽으면 자동으로 Render로" 방식을 검토했다. 하지만 Render가 보는 Neon은 전환 시점에 멈춘 데이터라, DB가 두 갈래로 갈라지는 **스플릿 브레인**이 생긴다. DB가 하나인 구성에서는 수동 롤백 + 백업이 더 안전하다.
 - 코드와 DB는 같은 시점의 것이어야 한다. 리허설 때 서버 코드가 DB보다 오래돼서 앱이 무한 재시작한 적이 있다(#8). 그래서 전환 절차에 "서버 코드를 운영과 같은 커밋으로 맞춘다"를 넣었다.
+- **병행 운영 일주일 뒤 Render·Neon 삭제 (2026-10-25)**: 그사이 콜드 스타트 비교 측정을 마치고, 예전 사진을 새 버킷으로 옮겼다(#13). 지우면 롤백할 곳이 사라진다. 대신 매일 백업과 복구 훈련으로 대비했다. 쓰지 않는 Neon에는 방 토큰이 든 사본이 남아 있었고, Render 환경변수에는 다른 계정의 장기 키가 있었다. 그래서 지우는 쪽이 보안상으로도 낫다고 판단했다.
 
 ### 백업: systemd timer → 비공개 S3, 서버는 지울 수 없음 (1-10)
 
@@ -183,11 +184,9 @@ flowchart LR
 
 | 상황 | 방법 | 시간 |
 |---|---|---|
-| 전환 직후 문제 (새 데이터 거의 없음) | `mysite`에서 전환 커밋을 revert → Pages 배포 (롤백 A) | 수 분 + Render 깨우는 데 약 22초 |
-| 전환 후 데이터가 쌓인 뒤 문제 | 먼저 롤백 A로 새 쓰기를 막음 → EC2 DB 덤프 → Neon에 복원 (롤백 B) | 수십 분 |
 | 앱 프로세스 죽음 | systemd가 자동으로 다시 띄움 | 3초 이내 |
 | DB 데이터 손상·실수로 삭제 | 최신 S3 백업 → `pg_restore` | 1초 미만 (최대 24시간 데이터 손실) |
 | 디스크 가득 참 | 원인 파일 삭제 → 서비스는 저절로 회복. 공간이 필요하면 EBS 확장(#12의 절차) | 수 분 |
 | 서버·디스크를 통째로 잃음 | 1-3~1-8을 다시 구성 → S3 백업으로 복원 | 수 시간 (→ 2단계 Terraform) |
 
-자세한 순서는 [CUTOVER.md](CUTOVER.md)(롤백 A/B)와 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) #12(EBS 확장)에 있다.
+EBS 확장 절차는 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) #12에 있다. 전환 기간(10/18~10/25)에는 Render로 되돌리는 롤백 A/B도 있었지만, Render·Neon을 지우면서 쓸 수 없게 됐다([CUTOVER.md](CUTOVER.md)에 기록만 남김).
