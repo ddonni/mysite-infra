@@ -149,6 +149,21 @@
 curl.exe -s -o NUL -w "dns:%{time_namelookup} tcp:%{time_connect} tls:%{time_appconnect} ttfb:%{time_starttransfer} total:%{time_total} code:%{http_code}`n" https://<백엔드주소>/<경로>
 ```
 
+### 2단계 — 관측성부터 (2026-10-27 시작)
+
+- 순서(사용자와 합의): ① readiness → ② 알림 채널 → ③ 백업 실패 알림 → ④ 바깥에서 서버 확인 → ⑤ 디스크·메모리 알림. Terraform보다 먼저인 이유: 롤백할 곳이 없고 실사용자가 들어오기 시작함
+- **① 완료**: `/health`(liveness) / `/health/db`(readiness, `SELECT 1 FROM rooms LIMIT 1`, 503, 접속·쿼리 3초) — 백엔드 `9ba1705`, 서버 배포 완료. 설계(나누기·503·가벼운 조회·이유는 로그에만)는 사용자가 정했고, 코드는 사용자 요청으로 Claude가 작성. 배포 중 502 발견 → 트러블슈팅 #14(Nginx error.log로 확인), infra `99a0e8a`
+- **② 디스코드 웹훅**: URL은 서버 `/etc/mysite/alert.env`(root 600, `DISCORD_WEBHOOK_URL=`)에만. 연결 테스트 204 확인
+- **③ 백업 실패 알림 (서버 작업 거의 끝, 문서 기록 전)**
+  - `/usr/local/bin/mysite-notify`(사용자 작성): `set -u` + `curl -sS -o /dev/null -w "%{http_code}
+" -m 60 -H "Content-Type: application/json" -d "{\"content\":\"$1\"}" --fail "$DISCORD_WEBHOOK_URL"`. 메시지 안에는 `"`를 쓰지 않기로 함. 공백 메시지·인자 없음 시험 통과
+  - `/etc/systemd/system/notify-failure@.service`(사용자 요청으로 Claude가 작성): oneshot, EnvironmentFile=alert.env, `ExecStart=mysite-notify "[%H] %i 실패. 확인: sudo journalctl -u %i -n 50"`, DynamicUser=yes. `notify-failure@test` 시험 메시지 옴
+  - 4단계 안내함: `sudo SYSTEMD_EDITOR=vi systemctl edit mysite-db-backup.service` → `[Unit] OnFailure=notify-failure@%n.service`, `systemd-run --unit=mysite-fail-test --property=OnFailure=notify-failure@mysite-fail-test.service /bin/false`로 시험. **사용자가 실행했는지 결과 미확인** → 다음에 `systemctl show mysite-db-backup.service -p OnFailure` 결과부터 물을 것
+  - 백업 스크립트는 이미 `set -euo pipefail` + 임시 파일 방식이라 어느 단계 실패든 서비스 실패로 끝남(확인함)
+  - 남은 문서: ROADMAP "백업 실패 알림" 체크 + 못 잡는 경우 두 줄(타이머가 아예 안 돎 → dead man's switch, 서버 통째로 죽음 → 바깥 확인)
+- 다음: **④ 바깥에서 `/health/db` 확인**(외부 서비스, healthchecks.io 같은 dead man's switch와 함께 검토)
+- 서버 파일 편집 명령은 **vi**로 안내(2026-10-27 사용자 요청)
+
 ## 지난 경과 (같은 실수 반복 방지용)
 
 - **골드버그 파이프라인** (https://github.com/ddonni/goldberg-pipeline, 미배포): S3 → Lambda → SNS → SQS → Lambda → Render 배포 훅을 도미노처럼 잇는 CI/CD. Claude가 코드를 다 작성(테스트 23개) → "서비스를 이어 붙인 느낌, 내가 만든 느낌 없음"으로 중단.
