@@ -163,7 +163,8 @@ curl.exe -s -o NUL -w "dns:%{time_namelookup} tcp:%{time_connect} tls:%{time_app
   - 남은 문서: ROADMAP "백업 실패 알림" 체크 + 못 잡는 경우 두 줄(타이머가 아예 안 돎 → dead man's switch, 서버 통째로 죽음 → 바깥 확인)
 - **③ 완료 (10/28)**: drop-in `OnFailure=` 확인 + `mysite-fail-test` 가짜 실패로 알림 도착. ROADMAP 기록함
 - **④ 완료 (10/28)**: 도쿄 Lambda `mysite-health-monitor`(Python 3.12, 128MB, 제한 2분, 환경 변수 `HEALTH_URL`·`DISCORD_WEBHOOK_URL`) + EventBridge 규칙 `each-5minutes` `rate(5 minutes)`. 5분마다 20초 간격 3번, 다 실패해야 알림, 복구 알림 없음(사용자 결정). 코드는 사용자 요청으로 Claude가 작성 → `monitor/lambda_function.py`(콘솔 코드와 같아야 함 — 바꾸면 둘 다). 404 실패 시험 41.5초, 알림 도착
-- 다음 후보: ⑤ 디스크 80%·메모리 알림(서버 안 timer + `mysite-notify` 재사용), 백업 타이머가 아예 안 도는 경우(dead man's switch), 그다음 IaC(Terraform — Lambda·EventBridge도 대상)
+- **⑤ 완료 (10/28)**: `mysite-resource-check.timer`(10분) + `.service`(DynamicUser, `OnFailure=notify-failure@%n.service`) + `/usr/local/bin/mysite-resource-check`(DISK_MAX=80, MEM_MIN_MB=150, 환경 변수로 바꿀 수 있음; Claude가 작성). 사용자가 Lambda로 다 되지 않냐고 물어서 "바깥은 죽었는지, 안은 죽기 전 신호" 설명함. `systemd-run -E DISK_MAX=1` 실패 시험 알림 도착
+- 다음 후보: OOM 감지, 백업 타이머가 아예 안 도는 경우(dead man's switch), 그다음 IaC(Terraform — Lambda·EventBridge도 대상)
 - **공개 레포에 AWS 계정 ID를 넣지 말 것** (콘솔 캡처에 ARN으로 보임)
 - 서버 파일 편집 명령은 **vi**로 안내(2026-10-27 사용자 요청)
 

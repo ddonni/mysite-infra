@@ -154,7 +154,10 @@
 **관측성 — 지금은 문제가 생겨도 아무도 모른다**
 - [X] **readiness 체크** → 2026-10-27: `/health`(liveness, 프로세스만)와 `/health/db`(readiness, `rooms`에서 한 줄 조회)를 나눔. DB가 안 되면 503 + 이유는 서버 로그에만, 접속·쿼리 각각 3초 넘으면 포기 (백엔드 `9ba1705`, 트러블슈팅 #11)
   - 나눈 이유: liveness에 DB까지 넣으면, DB가 죽었을 때 프로세스를 재시작하게 된다. 재시작해도 죽은 DB는 살아나지 않는다. 그래서 "서비스를 쓸 수 있는 상태인가"(readiness)는 따로 둔다. 또 `/health`는 응답 시간 측정의 기준선이라(MEASUREMENTS) 그대로 둬야 이전 숫자와 비교할 수 있다
-- [ ] **디스크 사용률 알림** (예: 80%): 100%가 되면 장애 순간의 로그부터 사라진다 (#12)
+- [X] **디스크 사용률 알림** → 2026-10-28: 10분마다 검사, 루트(/) 80% 이상이면 디스코드 알림. 100%가 되면 장애 순간의 로그부터 사라지기 때문에 그 전에 알아야 한다 (#12)
+  - 구성: `mysite-resource-check.timer`(`OnCalendar=*:0/10`) → `.service`(`DynamicUser=yes`, `OnFailure=notify-failure@%n.service`) → `/usr/local/bin/mysite-resource-check`. 기준을 넘으면 숫자를 로그에 찍고 `exit 1` → 백업 알림과 같은 경로로 디스코드
+  - 매번 현재 값을 로그에 남김 → `journalctl -u mysite-resource-check`로 추세를 볼 수 있다
+  - 시험: 기준을 1%로 낮춘 임시 서비스(`systemd-run -E DISK_MAX=1 ...`)로 알림 도착 확인
 - [X] **백업 실패 알림** → 2026-10-27~28: 백업 서비스가 실패하면 systemd `OnFailure=`가 알림 서비스를 실행 → 디스코드 웹훅 (1-10)
   - 구성: `mysite-db-backup.service`에 drop-in `OnFailure=notify-failure@%n.service` → 템플릿 유닛 `notify-failure@.service`(`DynamicUser=yes`) → `/usr/local/bin/mysite-notify`(curl `--fail`, 60초 제한). 웹훅 URL은 `/etc/mysite/alert.env`(root 600)에만
   - 시험: 무조건 실패하는 임시 서비스(`systemd-run ... /bin/false`)로 알림 도착 확인. 진짜 백업은 건드리지 않음
@@ -166,8 +169,10 @@
   - 제한 시간 2분: 최악은 서버가 응답하지 않을 때 20초 대기 × 3 + 쉼 20초 × 2 = 100초
   - 정한 것: 한 번 실행할 때 **20초 간격으로 3번** 찔러서 3번 다 실패해야 알림(약 40초 이상 장애). 새벽 자동 재부팅(약 19초, MEASUREMENTS 2-2c)이나 배포 중 502(#14)에는 울리지 않게. 실행마다 기억이 없어도 되는 방식이라 실패 횟수를 따로 저장하지 않는다
   - 복구 알림은 받지 않는다. 대신 장애가 이어지는 동안 5분마다 알림이 오고, 저절로 복구됐는지는 직접 확인해야 한다
-- [ ] **메모리 감시**: 1GB 서버라 자동 업데이트(약 119MB)와 앱이 겹치는 순간이 가장 위험하다 (1-6 측정)
-- [ ] 알림이 생기기 전까지는 사람이 대신 확인한다: 이틀에 한 번 `backup ok` 개수, `df -h /`, `/api/rooms/TTHB8N` 200
+- [X] **메모리 감시** → 2026-10-28: 같은 검사에서 `MemAvailable`이 150MB 미만이면 알림. 1GB 서버라 자동 업데이트(약 119MB)와 앱이 겹치는 순간이 가장 위험하다 (1-6 측정, 평소 available 약 480~520Mi)
+  - `free`가 아니라 `available`을 본다: 리눅스는 남는 메모리를 캐시로 써서 `free`는 평소에도 작다
+  - **한계**: 10분에 한 번 재는 방식이라 순간적인 피크는 놓칠 수 있다 → (검토) OOM killer 발생을 감지해 알림
+- [ ] 알림이 생기기 전까지는 사람이 대신 확인한다: 이틀에 한 번 `backup ok` 개수, `df -h /`, `/api/rooms/TTHB8N` 200 → 10/28 기준 디스크·서버 생존은 알림으로 대체됨. 남은 건 **백업이 아예 안 돌았는지**(`backup ok` 개수) → (검토) 정해진 시간에 성공 신호가 안 오면 알리는 방식(dead man's switch)
 - [ ] (검토) SSM 세션 로깅(S3/CloudWatch): bash 기록은 세션을 끝낸 방식에 따라 남지 않아서 감사 기록이 될 수 없다 (#6)
 
 **IaC — 서버를 통째로 잃으면 지금은 수 시간 걸린다**
