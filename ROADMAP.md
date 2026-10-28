@@ -179,11 +179,19 @@
 - [ ] VPC·보안그룹·EC2·IAM 역할·S3 버킷 두 개를 Terraform으로. 목표는 서버 재구축 RTO를 "수 시간"에서 "수십 분"으로 줄이는 것 (MEASUREMENTS 2-2b)
 - [ ] 서버 안의 설정(Nginx, systemd 유닛, journald, 백업 스크립트)도 재현할 수 있게 → user-data 스크립트나 Ansible 검토
 
-**CI/CD — 지금은 서버에서 손으로 `git pull`한다**
-- [ ] GitHub Actions → EC2 배포 자동화 (OIDC, 최소 권한). 서버 코드와 DB 마이그레이션이 같은 시점이어야 한다 (#8)
-- [ ] **테스트가 통과해야만 배포**: Render 시절에는 CI 결과와 상관없이 push만 하면 배포됐다 (1-0)
-- [ ] **배포 중 502**: 지금은 `systemctl restart` 하는 몇 초 동안 Nginx가 502를 낸다(#14). 배포 뒤 `/health/db`가 200이 될 때까지 확인하고, 다운타임을 줄이는 방법 검토
-- [ ] CI 이미지 태그 버그: PR 빌드도 `:latest`를 덮어쓰고 SHA 태그가 없다 → 롤백할 버전이 남지 않음 (1-0)
+**CI/CD — main에 push하면 테스트 → 배포 (2026-10-28부터)**
+- [X] **GitHub Actions → EC2 배포 자동화** → 2026-10-28: 백엔드 `7256542`. GitHub OIDC → IAM 역할 `github-deploy-mysite-backend` → SSM `send-command`로 서버의 `/usr/local/bin/mysite-deploy <SHA>` 실행. GitHub에 AWS 키를 저장하지 않고, 서버에 SSH 포트도 열지 않는다
+  - 최소 권한: 신뢰 정책은 이 레포의 `main` 브랜치만(`sub`), 권한은 이 인스턴스 하나에 `AWS-RunShellScript` 문서로 `SendCommand` + 결과 조회(`GetCommandInvocation`)뿐
+  - **테스트한 그 커밋만 배포**: `git pull`이 아니라 `fetch` + `checkout --detach <SHA>`. 테스트하는 사이 main에 새 커밋이 들어와도, 테스트를 거치지 않은 코드는 올라가지 않는다. 그래서 서버는 detached HEAD 상태다
+  - 서버 스크립트는 SHA를 40자리 16진수로만 받고(명령 주입 방지), `origin/main`에 들어 있는 커밋인지 확인한다(`merge-base --is-ancestor`). `flock`으로 서버에서 배포는 한 번에 하나, 워크플로는 `concurrency`로 차례대로
+  - 손으로 배포할 때도 브랜치가 아니라 커밋을 가리킨다: `sudo mysite-deploy $(git -C /opt/mysite-backend ls-remote origin refs/heads/main | cut -f1)`
+  - 서버 코드와 DB 마이그레이션은 같은 시점에 바뀐다(마이그레이션이 앱 기동 때 돌아서, #8). 대신 코드만 되돌리면 안 되는 경우가 생긴다 → README "롤백·복구 방법"
+  - 첫 실행은 역할을 빌리는 단계에서 실패 → 트러블슈팅 #15 (OIDC `sub`에 ID가 붙어 옴)
+- [X] **테스트가 통과해야만 배포** → `deploy` 잡이 `needs: test`, main push에서만 실행(PR은 테스트만). Render 시절에는 CI 결과와 상관없이 push만 하면 배포됐다 (1-0)
+- [X] **배포 실패 알림** → 배포 잡의 어느 단계든 실패하면 실행 링크를 디스코드로. 첫 실행 실패(#15) 때 실제로 도착함
+- [ ] **배포 중 502**: 배포 뒤 `/health/db`를 20초 간격 3번 확인해서 한 번이라도 200이면 성공으로 넣음(바깥 감시와 같은 규칙). 하지만 `systemctl restart` 하는 몇 초 동안의 502 자체는 그대로다(#14) → 3단계 무중단 배포에서
+- [X] ~~CI 이미지 태그 버그~~ → 해당 없음: 운영 서버는 이미지를 쓰지 않아서 `build-image` 잡을 지웠다. 롤백할 버전은 git 커밋(SHA)으로 남는다 (1-0)
+- [ ] (검토) 자동 롤백: 지금은 실패를 알리기만 한다. 마이그레이션이 들어간 배포는 코드만 되돌리면 #8처럼 무한 재시작할 수 있어서, 사람이 보고 판단한다
 
 **기타**
 - [ ] (선택) Nginx `client_body_buffer_size` 64k: 그림 저장(약 20KB)이 디스크 임시 파일을 거치지 않게 함. 대신 연결마다 메모리를 더 쓴다 (#12)

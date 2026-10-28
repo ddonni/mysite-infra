@@ -270,3 +270,20 @@ EBS는 **늘리기만 되고 줄일 수 없다.** 또 한 번 수정하면 다�
     | 앱은 살아 있고 DB가 죽음 | 앱 (`/health/db`) | 503 |
     | 앱 프로세스가 죽음 / 뜨는 중 | Nginx | 502 |
   - 지금 배포 방식(손으로 재시작)은 **배포할 때마다 몇 초씩 502**가 난다. 2단계 CI/CD에서 다룬다(ROADMAP).
+
+## #15 GitHub Actions가 AWS 역할을 못 빌림 — 정책은 맞는데 `sub` 형식이 달랐다 (2026-10-28, 2단계 CI/CD)
+
+- **증상**: 첫 자동 배포에서 `configure-aws-credentials` 단계가 `Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity`로 실패했다. 액션이 몇 번 다시 시도해서 2분 33초 뒤에 끝났다. 서버에는 아무 명령도 가지 않았다. 디스코드 배포 실패 알림은 왔다(실패 알림 시험이 덤으로 됨).
+- **원인 추측**: 신뢰 정책의 조건(`sub`, `aud`), `Action` 이름, GitHub Secret에 넣은 역할 ARN 중 하나가 틀렸다.
+- **확인한 것**:
+  - 신뢰 정책은 문서 예시와 똑같았다(`Action`, `Federated`, `aud`, `sub` 모두).
+  - CloudTrail 이벤트 기록(서울) → 이벤트 이름 `AssumeRoleWithWebIdentity` → 실패 이벤트. `requestParameters`는 null이었다(거부된 요청은 비워서 기록됨). 대신 `userIdentity.userName`에 GitHub가 **실제로 보낸** `sub`가 있었다.
+    ```
+    정책:  repo:ddonni/mysite-backend:ref:refs/heads/main
+    실제:  repo:ddonni@<사용자 ID>/mysite-backend@<레포 ID>:ref:refs/heads/main
+    ```
+- **진짜 원인**: GitHub가 `sub`에 사용자와 레포의 **고유 ID 숫자**를 붙여서 보낸다. 이름은 지우고 같은 이름으로 다시 만들 수 있지만 ID는 그 레포 하나에만 붙는다. 그래서 누가 같은 이름으로 레포를 새로 만들어도 이 역할을 빌릴 수 없다. 대부분의 문서와 예시는 ID가 없는 옛 형식으로 적혀 있다.
+- **해결**: 신뢰 정책의 `sub`를 CloudTrail에서 본 값 그대로 바꿨다(ID는 비밀이 아니라 GitHub API로 누구나 볼 수 있는 값). Re-run → 성공.
+- **배운 점**:
+  - `AccessDenied`는 무엇이 틀렸는지 알려 주지 않는다(일부러 그렇다). 정책을 눈으로 다시 읽는 대신 CloudTrail에서 **실제로 들어온 값**을 보고 비교하면 바로 보인다.
+  - 레포를 지우고 다시 만들거나 계정 이름을 바꾸면 이 정책도 같이 바꿔야 한다.
