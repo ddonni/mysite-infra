@@ -54,3 +54,68 @@ import {
   to = aws_iam_role_policy_attachment.health_monitor_logs
   id = "mysite-health-monitor-role-67xhtdin/${local.health_monitor_log_arn}"
 }
+
+# ---- 아래는 generate-config-out 결과를 다듬은 것 ----
+# 고친 방향: 기본값 지우기, 계정 ID는 local.account_id로, 서로 가리키는 값은
+# 문자열 대신 참조(aws_xxx.yyy.name)로 → Terraform이 만드는 순서와 연결 관계를 안다.
+
+# Lambda 함수는 아직 Terraform 밖(웹훅 URL 처리를 정한 뒤 import). 그때까지 ARN만 조립.
+locals {
+  health_monitor_function_name = "mysite-health-monitor"
+  health_monitor_function_arn  = "arn:aws:lambda:ap-northeast-1:${local.account_id}:function:${local.health_monitor_function_name}"
+}
+
+resource "aws_cloudwatch_event_target" "health_monitor" {
+  provider  = aws.tokyo
+  rule      = aws_cloudwatch_event_rule.health_monitor.name
+  target_id = "ca39ckwo5lz5now0dsdc"
+  arn       = local.health_monitor_function_arn
+}
+
+resource "aws_lambda_permission" "health_monitor_events" {
+  provider      = aws.tokyo
+  statement_id  = "lambda-04014522-1c56-4664-a0d9-91932e10bb79"
+  action        = "lambda:InvokeFunction"
+  function_name = local.health_monitor_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.health_monitor.arn # 이 규칙만 부를 수 있음
+}
+
+resource "aws_iam_role" "health_monitor" {
+  name = "mysite-health-monitor-role-67xhtdin"
+  path = "/service-role/"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+# 로그 그룹 하나에만 쓸 수 있는 최소 권한(콘솔이 만든 그대로)
+resource "aws_iam_policy" "health_monitor_logs" {
+  name = "AWSLambdaBasicExecutionRole-1ab51aa1-1f38-44e4-ad3a-49600b2cc63f"
+  path = "/service-role/"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "logs:CreateLogGroup"
+        Resource = "arn:aws:logs:ap-northeast-1:${local.account_id}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = ["arn:aws:logs:ap-northeast-1:${local.account_id}:log-group:/aws/lambda/${local.health_monitor_function_name}:*"]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "health_monitor_logs" {
+  role       = aws_iam_role.health_monitor.name
+  policy_arn = aws_iam_policy.health_monitor_logs.arn
+}
