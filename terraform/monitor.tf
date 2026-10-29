@@ -16,3 +16,22 @@ resource "aws_cloudwatch_event_rule" "health_monitor" {
   schedule_expression = "rate(5 minutes)"
   state               = "ENABLED"
 }
+
+# 규칙 → Lambda 연결, EventBridge가 Lambda를 불러도 된다는 허가, Lambda 실행 역할.
+# 셋 다 콘솔이 트리거·함수를 만들 때 자동으로 만든 것이라 ID가 무작위.
+import {
+  provider = aws.tokyo
+  to       = aws_cloudwatch_event_target.health_monitor
+  id       = "each-5minutes/ca39ckwo5lz5now0dsdc"
+}
+
+import {
+  provider = aws.tokyo
+  to       = aws_lambda_permission.health_monitor_events
+  id       = "mysite-health-monitor/lambda-04014522-1c56-4664-a0d9-91932e10bb79"
+}
+
+import {
+  to = aws_iam_role.health_monitor # IAM은 리전이 없음(전역)
+  id = "mysite-health-monitor-role-67xhtdin"
+}
