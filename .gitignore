@@ -1,1 +1,9 @@
 __pycache__/
+
+# Terraform: state는 S3에만(공개 레포에 리소스 ID·설정이 올라가지 않게)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+crash.log
