@@ -24,7 +24,7 @@
 ## 사용자 환경
 
 - Windows + PowerShell. PC가 두 대: 집 PC, 학원(국비교육) PC.
-- **학원 PC에는 AWS 액세스 키를 저장하지 않는다** (공용 PC). 학원에서는 콘솔 로그인·측정·공부 위주, AWS CLI/Terraform 작업은 집에서.
+- **학원 PC에는 AWS 액세스 키를 저장하지 않는다** (공용 PC). 학원에서는 콘솔 로그인·측정·공부 위주. **AWS CLI/Terraform은 학원에서도 AWS CloudShell(서울)에서** 한다(2026-10-29~, 콘솔 로그인 권한을 써서 PC에 키가 안 남음). 학원 PC에서 `aws configure` 금지. 코드는 VS Code에서 쓰고 push → CloudShell에서 `git pull` → plan/apply(CloudShell은 GitHub 로그인이 없어 push 불가 — 파일이 생기면 내용을 붙여 받아 Claude가 커밋)
 - 평일 저녁 위주로 작업 시간이 제한적이라 한 번에 끝낼 수 있는 크기로 쪼개서 안내한다.
 
 ## AWS 계정 상태
@@ -165,7 +165,14 @@ curl.exe -s -o NUL -w "dns:%{time_namelookup} tcp:%{time_connect} tls:%{time_app
 - **④ 완료 (10/28)**: 도쿄 Lambda `mysite-health-monitor`(Python 3.12, 128MB, 제한 2분, 환경 변수 `HEALTH_URL`·`DISCORD_WEBHOOK_URL`) + EventBridge 규칙 `each-5minutes` `rate(5 minutes)`. 5분마다 20초 간격 3번, 다 실패해야 알림, 복구 알림 없음(사용자 결정). 코드는 사용자 요청으로 Claude가 작성 → `monitor/lambda_function.py`(콘솔 코드와 같아야 함 — 바꾸면 둘 다). 404 실패 시험 41.5초, 알림 도착
 - **⑤ 완료 (10/28)**: `mysite-resource-check.timer`(10분) + `.service`(DynamicUser, `OnFailure=notify-failure@%n.service`) + `/usr/local/bin/mysite-resource-check`(DISK_MAX=80, MEM_MIN_MB=150, 환경 변수로 바꿀 수 있음; Claude가 작성). 사용자가 Lambda로 다 되지 않냐고 물어서 "바깥은 죽었는지, 안은 죽기 전 신호" 설명함. `systemd-run -E DISK_MAX=1` 실패 시험 알림 도착
 - **CI/CD 완료 (10/28)**: 백엔드 `7256542`. OIDC 공급자 + 역할 `github-deploy-mysite-backend`(신뢰: main만, 권한: 이 인스턴스에 `AWS-RunShellScript` SendCommand + GetCommandInvocation) → SSM → 서버 `/usr/local/bin/mysite-deploy <SHA>`(Claude가 작성: SHA 형식 검사, flock, merge-base로 main 소속 확인, checkout --detach, pip, restart) → `/health/db` 3번 → 실패 시 디스코드. 사용자 결정: push 방식, 실패만 알림, DB 변경은 수동, 자동 롤백 없음, build-image 삭제. 첫 실행 AccessDenied → CloudTrail에서 실제 `sub`에 ID가 붙은 걸 확인(트러블슈팅 #15). 롤백 런북은 README "롤백·복구 방법"
-- 다음 후보: OOM 감지, 백업 타이머가 아예 안 도는 경우(dead man's switch), 그다음 IaC(Terraform — Lambda·EventBridge·OIDC 역할도 대상)
+- **Terraform 시작 (10/29, 진행 중)** — 사용자는 Terraform 처음. 기초(선언형, 블록, state, init/plan/apply, `-/+` 금지, import) 설명함
+  - CloudShell `~/bin/terraform` v1.17.1(직접 설치, 체크섬 확인), AWS provider 6.71.0(lock 파일 커밋). state: 손으로 만든 버킷 `mysite-tfstate-ddonni`(서울, 버전 관리, `use_lockfile`). `default_tags`는 일부러 안 씀(import 후 No changes 목표). 계정 ID는 `data.aws_caller_identity`로
+  - 방식: `import` 블록 → `plan -generate-config-out=generated.tf` → 사용자가 붙여 줌(계정 ID 가림) → Claude가 다듬어 `terraform/monitor.tf`에 → `plan -out=import.tfplan` → `apply import.tfplan` → `plan` No changes
+  - **완료**: 도쿄 EventBridge 규칙 `each-5minutes` (No changes 확인)
+  - **코드만 push, apply 전**: target, lambda permission, 실행 역할, 로그 정책, 정책 붙이기(`d7079b6`). 다음에 `rm -f generated.tf; git pull; terraform plan -out=import.tfplan` → 기대 `5 to import, 0 change` 결과부터 물을 것
+  - 남은 감시자 부품: Lambda 함수 본체 — 환경 변수에 웹훅 URL이 있어 generated.tf·공개 레포에 평문이 들어감 → 방법 정하기(`ignore_changes = [environment]` 또는 웹훅을 SSM Parameter Store로 옮겨 코드에서 읽기). 그다음 순서: 네트워크(VPC·서브넷·라우팅·SG) → IAM(EC2 역할·OIDC 역할)·S3 두 개 → EC2(`prevent_destroy`)
+  - 코치 규칙(사용자가 짜기) vs Claude가 짜기: 사용자가 답하지 않았고 지금은 Claude가 다듬는 중
+- 다음 후보(그 밖): OOM 감지, 백업 타이머가 아예 안 도는 경우(dead man's switch)
 - **공개 레포에 AWS 계정 ID를 넣지 말 것** (콘솔 캡처에 ARN으로 보임)
 - 서버 파일 편집 명령은 **vi**로 안내(2026-10-27 사용자 요청)
 
