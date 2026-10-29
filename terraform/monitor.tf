@@ -35,3 +35,22 @@ import {
   to = aws_iam_role.health_monitor # IAM은 리전이 없음(전역)
   id = "mysite-health-monitor-role-67xhtdin"
 }
+
+# 역할에 붙은 정책: 콘솔이 만든 CloudWatch Logs 쓰기 권한. 인라인 정책은 없음(확인함).
+# 계정 ID는 공개 레포에 적지 않고 실행할 때 읽는다.
+data "aws_caller_identity" "current" {}
+
+locals {
+  account_id             = data.aws_caller_identity.current.account_id
+  health_monitor_log_arn = "arn:aws:iam::${local.account_id}:policy/service-role/AWSLambdaBasicExecutionRole-1ab51aa1-1f38-44e4-ad3a-49600b2cc63f"
+}
+
+import {
+  to = aws_iam_policy.health_monitor_logs
+  id = local.health_monitor_log_arn
+}
+
+import {
+  to = aws_iam_role_policy_attachment.health_monitor_logs
+  id = "mysite-health-monitor-role-67xhtdin/${local.health_monitor_log_arn}"
+}
