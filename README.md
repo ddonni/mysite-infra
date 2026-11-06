@@ -10,6 +10,8 @@ mysite 백엔드(FastAPI + PostgreSQL + WebSocket)를 Render 무료 플랜에서
 - **전환**: 절차서([CUTOVER.md](CUTOVER.md))를 먼저 쓰고, 롤백 계획을 세운 뒤 전환했다. 최종 덤프와 서버 DB의 행 수가 일치하는 것을 확인했다.
 - **운영**: 자동 보안 업데이트와 재부팅(다운타임 약 19초), 매일 백업 + 복구 훈련(RPO 24시간, DB 복원 0.8초), 앱이 죽으면 3초 안에 자동으로 다시 뜬다.
 - **장애 실험**: 앱 강제 종료, DB 중지, 디스크 100%를 일부러 일으켰다. 예측과 결과를 비교하고, 그 과정에서 숨어 있던 문제 두 개를 찾아 고쳤다.
+- **자동화 (2단계)**: main에 push하면 테스트 → 통과한 그 커밋만 EC2에 배포(GitHub OIDC + SSM, 키·SSH 없음) → 실패하면 디스코드. 손으로 만든 운영 인프라 17개를 Terraform으로 import해서 `plan` No changes, 서버는 한 번도 재시작하지 않았다.
+- **쿠버네티스 로컬 실습 (3단계 준비)**: 같은 앱과 DB를 PC의 kind 클러스터에 올렸다. `replicas: 2`로 띄우자 운영(앱 1개)에서는 드러나지 않던 **기동 마이그레이션 경쟁 조건**이 나왔고, PostgreSQL advisory lock으로 고친 뒤 고치기 전과 후를 같은 조건에서 비교했다. → [아래](#쿠버네티스-로컬-실습-k8s)
 - **트러블슈팅 15건**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md). 특히 아래 세 건.
   - **#7 비밀번호 노출 → 교체**: 교체한 뒤 예전 비밀번호가 실제로 거절되는 것까지 확인했다.
   - **#10 "가끔 나는 500"**: 원인은 새벽 자동 업데이트가 DB를 재시작한 것이었다. 고치기 전 버전으로 되돌려 같은 조건에서 500이 나는 것까지 보여 주는 대조 실험으로 검증했다.
@@ -22,6 +24,8 @@ mysite 백엔드(FastAPI + PostgreSQL + WebSocket)를 Render 무료 플랜에서
 | [MEASUREMENTS.md](MEASUREMENTS.md) | 이사 전후 측정, 메모리·디스크, 백업·복구, 비용 |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 증상 → 원인 추측 → 확인한 것 → 진짜 원인 → 해결 → 배운 점 |
 | [CUTOVER.md](CUTOVER.md) | 전환 절차서, 전환 기간의 롤백 계획, 실행 기록 |
+| [terraform/](terraform/README.md) | 운영 인프라 코드(import 방법, 실행 방법, 아직 밖에 있는 것) |
+| [k8s/](k8s/) | 로컬 kind 실습용 매니페스트(클러스터, PostgreSQL, 백엔드) |
 
 ## 구성도
 
@@ -123,7 +127,7 @@ flowchart LR
 - **환경변수는 `/etc/mysite/backend.env`(root, 600)**: systemd가 root로 읽어서 넣어 준 뒤 `mysite` 계정으로 앱을 실행한다. 그래서 앱 계정 자신도 파일을 읽을 수 없다. AWS 키는 넣지 않는다.
 - **systemd 하드닝**: `NoNewPrivileges`, `ProtectSystem=strict`(시스템 전체 읽기 전용), `ProtectHome`, `PrivateTmp`. 이 중 `ProtectHome`이 libpq의 SSL 기본 동작과 부딪쳐서, 새 DB 연결마다 SSL 시도가 실패하고 있었다. 1-11 장애 실험에서 발견해 `sslmode=disable`로 고쳤다(#11). 같은 서버 안의 연결이라 암호화할 대상이 없다.
 - **`Restart=always`**: `kill -9`를 해도 3초 안에 새 프로세스로 뜬다. 대신 계속 죽는 앱도 겉으로는 살아 있는 것처럼 보인다. 그래서 `restart counter`를 함께 본다(#8).
-- **Docker 대신 venv + systemd**: 1단계 목표가 리눅스 서비스 운영 자체를 익히는 것이라서, 프로세스·계정·권한·로그를 OS 수준에서 직접 다뤘다. 컨테이너는 3단계(k3s)에서 다룬다.
+- **Docker 대신 venv + systemd**: 1단계 목표가 리눅스 서비스 운영 자체를 익히는 것이라서, 프로세스·계정·권한·로그를 OS 수준에서 직접 다뤘다. 컨테이너는 3단계에서 다룬다. 먼저 PC의 kind 클러스터로 실습하고 있다([아래](#쿠버네티스-로컬-실습-k8s)).
 
 ### 사진 저장: 이 계정 서울 리전에 새 버킷 + EC2 역할 (1-6)
 
@@ -168,6 +172,73 @@ flowchart LR
 | 서버가 통째로 죽으면 서버 안에서는 알릴 수 없음 | ~~바깥 감시~~ → 도쿄 Lambda가 5분마다 `/health/db` 확인 완료 (10/28) |
 | 서버에서 손으로 `git pull` → 재시작 (테스트와 무관) | ~~배포 자동화~~ → 테스트 통과 → OIDC → SSM으로 그 커밋만 배포, 실패하면 디스코드 완료 (10/28) |
 | 서버를 잃으면 재구축에 수 시간 | ~~인프라 코드화~~ → 운영 중인 네트워크·EC2·바깥 감시를 Terraform으로 import, `plan` No changes (11/06). 서버 안 설정(Nginx, systemd 등)은 아직 손으로 |
+
+### 배포 자동화: GitHub OIDC → SSM (2단계)
+
+- **GitHub에 AWS 키를 두지 않는다**: Actions가 OIDC 토큰으로 IAM 역할을 잠깐 빌린다. 신뢰 정책은 이 레포의 `main` 브랜치만 허용하고, 권한은 이 인스턴스 하나에 `SendCommand`와 결과 조회뿐이다.
+- **SSH 대신 SSM `send-command`**: 서버는 여전히 22번을 열지 않는다. 서버의 `mysite-deploy <SHA>`가 그 커밋으로 `checkout --detach` → 재시작한다. `git pull`이 아니어서, 테스트하는 사이 main에 들어온 커밋은 테스트 없이 올라가지 않는다.
+- **배포 뒤 확인**: `/health/db`를 20초 간격으로 3번 찔러 한 번이라도 200이면 성공이고, 어느 단계든 실패하면 디스코드로 알린다. 자동 롤백은 하지 않는다(DB 변경이 들어간 배포는 코드만 되돌리면 안 되는 경우가 있어서, 아래 "롤백·복구 방법").
+- 자세한 구성과 첫 실패(#15, OIDC `sub` 형식)는 [ROADMAP.md](ROADMAP.md) 2단계에.
+
+### 인프라 코드화: 새로 만들지 않고 import (2단계)
+
+- **이미 운영 중인 것을 장부에 등록**: VPC·서브넷·IGW·라우팅·보안 그룹·EC2·Elastic IP(서울)와 바깥 감시 Lambda 일체(도쿄), 17개. 새로 만들어 갈아타면 IP와 서버가 바뀌어서, 지금 것을 그대로 `import`했다. 끝난 기준은 `terraform plan`이 **No changes**.
+- **실행은 AWS CloudShell에서**: 콘솔 로그인 권한을 그대로 쓰니 공용 PC(학원)에 액세스 키를 남기지 않는다. state는 S3에 두고 `use_lockfile`로 잠근다.
+- **사고 방지**: 바꾸면 교체(`-/+`)되는 값(AMI, 서브넷, 디스크 암호화 등)은 지금 값 그대로 적고, 운영 서버·EIP·VPC·서브넷·보안 그룹에 `prevent_destroy`를 걸었다. 공개 레포라 계정 ID는 코드에 적지 않는다(`data.aws_caller_identity`).
+- **코드로 옮기다 보인 것**: 루트 디스크가 암호화돼 있지 않음(바꾸려면 디스크 교체), CPU 크레딧 `unlimited`, Lambda 로그 보관이 무기한(→ 30일로 바꿈).
+- 방법과 실행 명령은 [terraform/README.md](terraform/README.md)에.
+
+## 쿠버네티스 로컬 실습 (k8s/)
+
+운영 서버(1GB)에는 쿠버네티스를 올리지 않는다. 대신 PC의 **kind**(Docker 컨테이너를 노드로 쓰는 클러스터)에 같은 앱과 DB를 올려서, EC2에서 손으로 풀었던 문제를 쿠버네티스가 어떻게 다루는지 본다. 운영과는 별개다.
+
+| 파일 | 내용 |
+|---|---|
+| [k8s/kind.yaml](k8s/kind.yaml) | 노드 하나짜리 클러스터 `mysite-lab`. NodePort 30080을 PC의 `127.0.0.1:8080`으로 연다 |
+| [k8s/postgres.yaml](k8s/postgres.yaml) | PostgreSQL 18 StatefulSet 하나 + 1Gi PVC, readiness는 `pg_isready` |
+| [k8s/backend.yaml](k8s/backend.yaml) | 백엔드 Deployment `replicas: 2`, 롤링 업데이트(`maxUnavailable: 0`), probe 세 개, NodePort Service |
+
+### 실행 방법 (Git Bash, 저장소들의 상위 폴더에서)
+
+```bash
+kind create cluster --config mysite-infra/k8s/kind.yaml
+docker build -t mysite-backend:lab mysite-backend
+kind load docker-image mysite-backend:lab --name mysite-lab   # 노드 안의 이미지 창고로 복사 (EKS라면 ECR이 하는 일)
+kubectl create namespace mysite
+kubectl -n mysite create secret generic db --from-literal=password=$(openssl rand -hex 16)
+kubectl apply -f mysite-infra/k8s/postgres.yaml -f mysite-infra/k8s/backend.yaml
+kubectl -n mysite get pods -w
+curl localhost:8080/health/db
+kind delete cluster --name mysite-lab   # 다 쓰면
+```
+
+- 비밀번호는 매니페스트에 없다. 실행할 때 무작위로 만들어 Secret에 넣는다. Secret은 base64로 **인코딩**될 뿐 암호화가 아니라서, 실제 운영이라면 RBAC로 읽을 사람을 줄이고 etcd 암호화(KMS)나 External Secrets 같은 외부 저장소를 쓴다.
+
+### probe 세 개 = 10/27에 나눈 두 health check
+
+| probe | 경로 | 실패하면 |
+|---|---|---|
+| startupProbe | `/health` | 기동(마이그레이션 포함)이 끝날 때까지 다른 probe를 미룬다. 최대 60초 |
+| livenessProbe | `/health` | 프로세스가 멈췄다고 보고 컨테이너를 재시작 |
+| readinessProbe | `/health/db` | 재시작하지 **않고** Service 트래픽에서만 뺀다 |
+
+DB가 죽었다고 앱을 재시작해 봐야 DB는 살아나지 않는다(#11). 그래서 DB 확인은 readiness에만 넣었다. EC2에서 `/health`와 `/health/db`를 나눈 이유가 그대로 쿠버네티스의 liveness/readiness 구분이 된다. 파드가 `Running`이어도 `READY 0/1`이면 트래픽을 받지 않는다.
+
+### 발견: 앱 두 개가 동시에 뜨면 마이그레이션이 부딪친다 (2026-11-06)
+
+- **증상**: 빈 DB에 처음 배포했더니 백엔드 파드 하나가 `RESTARTS 1`. 다시 뜬 뒤에는 정상.
+- **원인 찾기**: `kubectl describe pod`에서 이전 컨테이너가 `Error`로 끝난 것을 보고, `kubectl logs --previous`로 죽기 직전 로그를 봤다. 두 파드가 동시에 "`alembic_version` 테이블이 없다"고 판단해서 둘 다 만들려 했고, 늦은 쪽이 `already exists`로 죽었다. startup probe 실패는 결과였고 원인이 아니었다. readiness 실패는 재시작을 일으키지 않는다.
+- **왜 운영에서는 안 보였나**: EC2에는 앱이 하나뿐이라 마이그레이션을 동시에 돌릴 일이 없었다.
+- **해결**: 기동 마이그레이션을 PostgreSQL **advisory lock**(`pg_advisory_lock`)으로 감쌌다. 먼저 잡은 쪽이 마이그레이션하고, 기다린 쪽은 이미 최신인 것을 보고 아무것도 하지 않는다. 잠금은 연결이 끊기면 풀려서, 중간에 죽어도 남지 않는다(백엔드 `38bd385`).
+- **검증**: 같은 조건(빈 DB, 파드 2개)으로 다시 띄워 두 파드 모두 `RESTARTS 0`, 두 번째 파드 로그에는 `Running upgrade`가 없는 것을 확인했다. 테스트 140개 통과.
+- (대안) 마이그레이션을 앱 기동에서 떼어 배포 전 Job(ArgoCD PreSync 훅 등)으로 한 번만 돌리는 방법도 있다. 지금은 EC2 운영과 같은 코드로 두 환경이 다 돌게 하려고 잠금을 골랐다.
+
+### 다음 실험
+
+- [ ] Prometheus + Grafana(kube-prometheus-stack): 대시보드와 알림 규칙 하나
+- [ ] DB 파드를 죽이면: 앱 파드는 재시작되지 않고 Ready만 빠지는지 (EC2 #11과 비교)
+- [ ] 롤링 업데이트 중에 계속 요청을 보내면: 배포 중 502(#14)가 사라지는지
+- [ ] (여유가 되면) ArgoCD로 git에서 배포
 
 ## 월 비용
 
