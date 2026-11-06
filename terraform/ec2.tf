@@ -22,7 +22,7 @@ import {
 # AWS가 정하는 값(사설 IP, 네트워크 인터페이스, CPU 옵션 등)은 적지 않는다.
 
 resource "aws_instance" "app" {
-  ami                    = "ami-05cd5f557a0769fae" # Ubuntu 24.04 arm64 (1-5에서 고른 것)
+  ami                    = "ami-05cd5f557a0769fae" # Ubuntu 24.04 arm64
   instance_type          = "t4g.micro"
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.web.id]
