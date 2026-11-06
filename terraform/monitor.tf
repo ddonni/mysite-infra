@@ -119,3 +119,16 @@ resource "aws_iam_role_policy_attachment" "health_monitor_logs" {
   role       = aws_iam_role.health_monitor.name
   policy_arn = aws_iam_policy.health_monitor_logs.arn
 }
+
+# Lambda 함수 본체와 로그 그룹. 함수 코드는 monitor/lambda_function.py와 같아야 함.
+import {
+  provider = aws.tokyo
+  to       = aws_lambda_function.health_monitor
+  id       = "mysite-health-monitor"
+}
+
+import {
+  provider = aws.tokyo
+  to       = aws_cloudwatch_log_group.health_monitor
+  id       = "/aws/lambda/mysite-health-monitor"
+}
