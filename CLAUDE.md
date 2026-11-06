@@ -168,10 +168,12 @@ curl.exe -s -o NUL -w "dns:%{time_namelookup} tcp:%{time_connect} tls:%{time_app
 - **Terraform 시작 (10/29, 진행 중)** — 사용자는 Terraform 처음. 기초(선언형, 블록, state, init/plan/apply, `-/+` 금지, import) 설명함
   - CloudShell `~/bin/terraform` v1.17.1(직접 설치, 체크섬 확인), AWS provider 6.71.0(lock 파일 커밋). state: 손으로 만든 버킷 `mysite-tfstate-ddonni`(서울, 버전 관리, `use_lockfile`). `default_tags`는 일부러 안 씀(import 후 No changes 목표). 계정 ID는 `data.aws_caller_identity`로
   - 방식: `import` 블록 → `plan -generate-config-out=generated.tf` → 사용자가 붙여 줌(계정 ID 가림) → Claude가 다듬어 `terraform/monitor.tf`에 → `plan -out=import.tfplan` → `apply import.tfplan` → `plan` No changes
-  - **완료**: 도쿄 EventBridge 규칙 `each-5minutes` (No changes 확인)
-  - **코드만 push, apply 전**: target, lambda permission, 실행 역할, 로그 정책, 정책 붙이기(`d7079b6`). 다음에 `rm -f generated.tf; git pull; terraform plan -out=import.tfplan` → 기대 `5 to import, 0 change` 결과부터 물을 것
-  - 남은 감시자 부품: Lambda 함수 본체 — 환경 변수에 웹훅 URL이 있어 generated.tf·공개 레포에 평문이 들어감 → 방법 정하기(`ignore_changes = [environment]` 또는 웹훅을 SSM Parameter Store로 옮겨 코드에서 읽기). 그다음 순서: 네트워크(VPC·서브넷·라우팅·SG) → IAM(EC2 역할·OIDC 역할)·S3 두 개 → EC2(`prevent_destroy`)
-  - 코치 규칙(사용자가 짜기) vs Claude가 짜기: 사용자가 답하지 않았고 지금은 Claude가 다듬는 중
+  - **11/06 핵심 완료 — 전부 No changes**: 도쿄 감시자 8개(규칙, target, permission, 역할, 정책, 붙이기, Lambda 함수, 로그 그룹) + 서울 네트워크 6개(VPC, 서브넷, IGW, 라우팅 테이블+연결, SG `MySecurityGroup`) + EC2 `i-0042815e2f7ff1caa`·EIP·EIP 연결. 파일: `terraform/{versions,monitor,network,ec2}.tf`
+  - Lambda: `archive_file`(provider `hashicorp/archive`)로 `monitor/lambda_function.py` 배포, `ignore_changes = [environment]`(웹훅), 로그 보관 30일(이 둘은 import와 함께 의도한 변경으로 apply). lock 파일은 Docker(`hashicorp/terraform:1.17.1`)에서 `providers lock` 3개 플랫폼으로 생성
+  - 함정: 초안의 빈 값 충돌(IPv6/IPAM/Outposts, az vs az_id, eip assoc의 instance_id vs eni), Lambda는 코드 출처가 없어 초안 에러. SG description은 바꾸면 교체 → 끝 공백까지 그대로
+  - 이 PC에서는 Docker로 `terraform fmt -check`·`validate`를 돌린 뒤 push(`MSYS_NO_PATHCONV=1 docker run ... hashicorp/terraform:1.17.1`)
+  - 남은 것: EC2 역할 `mysite-ec2-role`·OIDC 배포 역할, S3 두 개, (검토) 웹훅 → SSM Parameter Store, 루트 디스크 암호화(교체 필요), 재구축 시간 측정
+  - 코드는 사용자 요청·일정(취업 지원 마감) 때문에 Claude가 다듬음
 - 다음 후보(그 밖): OOM 감지, 백업 타이머가 아예 안 도는 경우(dead man's switch)
 - **공개 레포에 AWS 계정 ID를 넣지 말 것** (콘솔 캡처에 ARN으로 보임)
 - 서버 파일 편집 명령은 **vi**로 안내(2026-10-27 사용자 요청)

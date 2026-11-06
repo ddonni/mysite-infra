@@ -176,7 +176,15 @@
 - [ ] (검토) SSM 세션 로깅(S3/CloudWatch): bash 기록은 세션을 끝낸 방식에 따라 남지 않아서 감사 기록이 될 수 없다 (#6)
 
 **IaC — 서버를 통째로 잃으면 지금은 수 시간 걸린다**
-- [ ] VPC·보안그룹·EC2·IAM 역할·S3 버킷 두 개를 Terraform으로. 목표는 서버 재구축 RTO를 "수 시간"에서 "수십 분"으로 줄이는 것 (MEASUREMENTS 2-2b)
+- [X] **운영 중인 인프라를 Terraform으로 import** → 2026-10-29~11-06: 서울 VPC·서브넷·IGW·라우팅·보안 그룹·EC2·Elastic IP + 도쿄 바깥 감시(EventBridge·Lambda·역할·정책·로그 그룹) 17개가 `terraform plan` → **No changes**. 새로 만든 게 아니라 손으로 만든 것을 장부에 등록했고, 서버는 한 번도 재시작되지 않았다. 코드는 [terraform/](terraform/)
+  - 실행은 **AWS CloudShell**(콘솔 로그인 권한, PC에 키를 남기지 않음). state는 S3(`use_lockfile`로 잠금, 버전 관리). 이 버킷만 손으로 만들었다(장부를 둘 곳을 Terraform으로 만들 수 없음)
+  - 방식: `import` 블록 → `plan -generate-config-out`으로 초안 → 다듬기 → `plan -out` → `apply` → `No changes`. 초안은 안 쓰는 기능(IPv6·IPAM·Outposts)의 빈 값끼리 충돌해서 그대로는 plan도 안 된다. 바꾸면 교체(`-/+`)되는 값(AMI, 서브넷, 디스크 암호화, 보안 그룹 설명)은 지금 값 그대로 적고, AWS가 정하는 값(사설 IP, ENI)은 적지 않았다
+  - 운영 서버·EIP·VPC·서브넷·보안 그룹에 `prevent_destroy`. 계정 ID는 `data.aws_caller_identity`로 읽어 공개 레포에 적지 않음
+  - Lambda 코드는 콘솔 편집기 대신 `monitor/lambda_function.py`를 `archive_file`로 묶어 배포(코드가 git 한 곳에만). 환경 변수는 웹훅 URL 때문에 `ignore_changes`. 로그 보관 무기한 → 30일
+  - 초안을 읽다가 발견: 루트 디스크 **암호화 안 됨**(바꾸려면 디스크 교체), CPU 크레딧 `unlimited`(T4g 기본값, 오래 과부하면 추가 요금)
+- [ ] 남은 것: EC2 역할·OIDC 배포 역할, S3 버킷 두 개(사진·백업), 메인 라우팅 테이블·default 보안 그룹
+- [ ] **재구축 시간 다시 재기**: 목표는 서버 재구축 RTO를 "수 시간"에서 "수십 분"으로 줄이는 것 (MEASUREMENTS 2-2b). 인프라는 `apply` 한 번이 됐지만, 서버 안 설정은 아직 손으로 해야 한다(아래 줄)
+- [ ] (검토) 웹훅 URL을 SSM Parameter Store로 옮기고 Lambda가 읽게 → `ignore_changes` 없애기
 - [ ] 서버 안의 설정(Nginx, systemd 유닛, journald, 백업 스크립트)도 재현할 수 있게 → user-data 스크립트나 Ansible 검토
 
 **CI/CD — main에 push하면 테스트 → 배포 (2026-10-28부터)**
