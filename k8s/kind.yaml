@@ -1,0 +1,12 @@
+# 로컬 실습용 클러스터(운영 아님). 운영 서버(1GB)에는 K8s를 올리지 않는다.
+#   kind create cluster --config k8s/kind.yaml
+# 노드 하나(control-plane 겸 워커). 앱 Service(NodePort 30080)를 PC의 localhost:8080으로 연다.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mysite-lab
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 8080
+        listenAddress: "127.0.0.1"

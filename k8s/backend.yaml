@@ -1,0 +1,82 @@
+# mysite-backend 2개. EC2에서 손으로 풀었던 것을 K8s가 어떻게 하는지 보는 게 목적.
+#
+# probe 세 개 = 10/27에 나눈 두 health check의 쓰임 그대로
+#   startupProbe   /health     기동(마이그레이션 포함)이 끝날 때까지 다른 probe를 미룸
+#   livenessProbe  /health     프로세스가 멈췄으면 → 컨테이너 재시작
+#   readinessProbe /health/db  DB를 못 쓰면 → 재시작하지 않고 트래픽에서만 뺌
+#     (DB가 죽었다고 앱을 재시작해 봐야 소용없다 — /health와 /health/db를 나눈 이유)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: mysite
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0 # 새 파드가 Ready가 된 뒤에 옛 파드를 내린다
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: mysite-backend:lab # docker build 후 kind load docker-image (README)
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db
+                  key: password
+            - name: DATABASE_URL # $(DB_PASSWORD)는 위에서 정의한 env를 K8s가 끼워 넣음
+              value: postgresql+psycopg2://mysite:$(DB_PASSWORD)@postgres:5432/mysite?sslmode=disable
+            - name: CORS_ORIGINS
+              value: "*"
+          ports:
+            - containerPort: 8000
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 2
+            failureThreshold: 30 # 최대 60초까지 기동을 기다림
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/db
+              port: 8000
+            periodSeconds: 5
+            timeoutSeconds: 5 # /health/db는 DB 접속·쿼리 각각 3초에서 포기
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: mysite
+spec:
+  type: NodePort
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080 # kind.yaml에서 PC의 127.0.0.1:8080으로 연결
