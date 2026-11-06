@@ -59,24 +59,22 @@ import {
 # 고친 방향: 기본값 지우기, 계정 ID는 local.account_id로, 서로 가리키는 값은
 # 문자열 대신 참조(aws_xxx.yyy.name)로 → Terraform이 만드는 순서와 연결 관계를 안다.
 
-# Lambda 함수는 아직 Terraform 밖(웹훅 URL 처리를 정한 뒤 import). 그때까지 ARN만 조립.
 locals {
   health_monitor_function_name = "mysite-health-monitor"
-  health_monitor_function_arn  = "arn:aws:lambda:ap-northeast-1:${local.account_id}:function:${local.health_monitor_function_name}"
 }
 
 resource "aws_cloudwatch_event_target" "health_monitor" {
   provider  = aws.tokyo
   rule      = aws_cloudwatch_event_rule.health_monitor.name
   target_id = "ca39ckwo5lz5now0dsdc"
-  arn       = local.health_monitor_function_arn
+  arn       = aws_lambda_function.health_monitor.arn
 }
 
 resource "aws_lambda_permission" "health_monitor_events" {
   provider      = aws.tokyo
   statement_id  = "lambda-04014522-1c56-4664-a0d9-91932e10bb79"
   action        = "lambda:InvokeFunction"
-  function_name = local.health_monitor_function_name
+  function_name = aws_lambda_function.health_monitor.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.health_monitor.arn # 이 규칙만 부를 수 있음
 }
@@ -131,4 +129,38 @@ import {
   provider = aws.tokyo
   to       = aws_cloudwatch_log_group.health_monitor
   id       = "/aws/lambda/mysite-health-monitor"
+}
+
+# 콘솔 편집기로 올렸던 코드를 레포의 파일로 대체: 이 파일이 바뀌면 apply 때 Lambda에 올라감.
+# zip은 실행할 때 만들어지는 결과물이라 git에 넣지 않음(.gitignore의 .build/).
+data "archive_file" "health_monitor" {
+  type        = "zip"
+  source_file = "${path.module}/../monitor/lambda_function.py"
+  output_path = "${path.module}/.build/health_monitor.zip"
+}
+
+resource "aws_lambda_function" "health_monitor" {
+  provider         = aws.tokyo
+  function_name    = local.health_monitor_function_name
+  role             = aws_iam_role.health_monitor.arn
+  runtime          = "python3.12"
+  handler          = "lambda_function.lambda_handler"
+  architectures    = ["arm64"]
+  memory_size      = 128
+  timeout          = 120 # 최악 100초(요청 20초×3 + 쉼 20초×2), lambda_function.py 맨 위 참고
+  filename         = data.archive_file.health_monitor.output_path
+  source_code_hash = data.archive_file.health_monitor.output_base64sha256
+
+  # 환경 변수(HEALTH_URL, DISCORD_WEBHOOK_URL)는 콘솔에서 넣은 값을 그대로 둔다.
+  # 웹훅 URL을 공개 레포에 적지 않으려고 Terraform이 보지 않게 함.
+  # (다음 할 일: 웹훅을 SSM Parameter Store로 옮기고 코드에서 읽기)
+  lifecycle {
+    ignore_changes = [environment]
+  }
+}
+
+resource "aws_cloudwatch_log_group" "health_monitor" {
+  provider          = aws.tokyo
+  name              = "/aws/lambda/${local.health_monitor_function_name}"
+  retention_in_days = 30 # 콘솔 기본값은 0(무기한 보관). 5분마다 쌓이므로 30일만
 }
